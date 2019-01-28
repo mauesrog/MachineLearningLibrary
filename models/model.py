@@ -5,6 +5,8 @@ mathematical models to implement.
 
 Attributes:
     eps (float): Step size of all numerical gradients.
+    DEFAULT_SHAPE_GRADIENT_CHECKER ((int, int)): Size of random matrices used
+        within `gradient_checker`.
 
 """
 
@@ -13,10 +15,12 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 
 from utils import loss as losses
+from utils.stats import validate_datasets, validate_feature_set, \
+                        validate_observation_set
 from utils.general import compose
 from utils.linalg import diagonal, random_matrix
-from test import ModuleTestCase as _ModuleTestCase
-from common.exceptions import IncompleteModelError as _IncompleteModelError, \
+from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSetsError, \
+                              IncompleteModelError as _IncompleteModelError, \
                               InvalidFeatureSetError as _InvalidFeatureSetError, \
                               InvalidModelParametersError as _InvalidModelParametersError, \
                               InvalidObservationSetError as _InvalidObservationSetError
@@ -132,9 +136,12 @@ class Model(object):
             np.matrix: Augmented feature set.
 
         """
-        return X
+        action = lambda: X
+        """callable: Augment update action."""
 
-    def evaluate(self, X, Y, loss_fn="mse", regularize=True, **kwargs):
+        return self._update_model(action, X=X, no_params=True)
+
+    def evaluate(self, X, Y, loss_fn="mse", regularize=True, params=None):
         """Model Evaluator.
 
         Given a set of features, predicts observations based on the current
@@ -148,8 +155,9 @@ class Model(object):
                 i.e. mean square error.
             regularize (bool, optional): Whether to include L2 regularization
                 in evaluation computations. Defaults to `True`.
-            **kwargs: Additional parameters needed by the specific model to
-                predict observations based on the given feature set.
+            params (tuple of np.matrix, optional): Parameters to use for
+                evaluation. Defaults to `None`, which implies that the current
+                trained parameters (i.e. `self.params`) will be used.
 
         Returns:
             (float, np.matrix): The evaluation error along with the predicted
@@ -159,29 +167,42 @@ class Model(object):
             AttributeError: If `loss_fn` is not recognized.
 
         """
-        if not hasattr(losses, loss_fn):
+        try:
+            loss = getattr(losses, loss_fn)
+            """callable: Loss function."""
+        except AttributeError:
             raise AttributeError("Unknown loss function '%s'." % loss_fn)
 
-        loss = getattr(losses, loss_fn)
-        """callable: Loss function."""
+        def action():
+            """Evaluate Update Action.
 
-        Y_hat = self.predict(X, **kwargs)
-        """np.matrix: Observation predictions."""
+            Defines the routine to run after the feature sets and parameters
+            have been validated.
 
-        eval = loss(Y, Y_hat)
-        """float: Evaluation error."""
+            Returns:
+                (float, np.matrix): The evaluation error along with the
+                    predicted observations.
 
-        # Only consider regularization if needed e.g. if parameters are being
-        # trained.
-        if regularize:
-            n = X.shape[0]
-            """int: Number of data points."""
+            """
+            Y_hat = self.predict(X)
+            """np.matrix: Observation predictions."""
 
-            # Revert mean computations and add regularization.
-            eval *= n
-            eval += self.regularization(**kwargs)
+            eval = loss(Y, Y_hat)
+            """float: Evaluation error."""
 
-        return eval, Y_hat
+            # Only consider regularization if needed e.g. if parameters are being
+            # trained.
+            if regularize:
+                n = X.shape[0]
+                """int: Number of data points."""
+
+                # Revert mean computations and add regularization.
+                eval *= n
+                eval += self.regularization()
+
+            return eval, Y_hat
+
+        return self._update_model(action, X=X, Y=Y, params=params)
 
     def gradient_checker(self, perturbations,
                          shape=DEFAULT_SHAPE_GRADIENT_CHECKER):
@@ -232,8 +253,7 @@ class Model(object):
 
         return grad_norms, ngrad_norms
 
-
-    def numerical_gradient(self, X, Y, params=None, **kwargs):
+    def numerical_gradient(self, X, Y, params=None):
         """Model Numerical Differentiator.
 
         Given sets of features and observations, computes the numerical gradient
@@ -245,42 +265,53 @@ class Model(object):
             params (tuple of np.matrix, optional): Parameters to use for
                 gradient computation. Defaults to `None`, which implies that the
                 current trained parameters (i.e. `self.params`) will be used.
-            **kwargs: Additional parameters needed by the specific model to
-                predict observations based on the given feature set.
 
         Returns:
             tuple of np.matrix: Parameter numerical gradients.
 
         """
-        if not params:
+        def action():
+            """Numerical Gradient Update Action.
+
+            Defines the routine to run after the feature sets and parameters
+            have been validated.
+
+            Returns:
+                (float, np.matrix): The evaluation error along with the
+                    predicted observations.
+
+            """
             params = self.params
+            """tuple of np.matrix: Parameters to use for gradient
+            computation."""
 
-        if not params:
-            raise _IncompleteModelError("Model parameters not set.")
+            grads = map(random_matrix, map(lambda p: p.shape, params))
+            """list of (int, int): Matrix dimensions for all parameters."""
+            err1 = self.evaluate(X, Y, params=params)[0]
+            """float: Model loss at the given parameters."""
 
-        grads = map(np.zeros, map(lambda p: p.shape, params))
-        """list of (int, int): Matrix dimensions for all parameters."""
-        err1 = self.evaluate(X, Y, params=params, **kwargs)[0]
-        """float: Model loss at the given parameters."""
+            for t in range(0, len(params)):
+                param = params[t]
+                """np.matrix: Parameter to differentiate in current
+                iteration."""
+                grad = grads[t]
+                """np.matrix: `param`'s numerical gradient."""
+                n, m = grad.shape
+                """np.matrix: Current parameter's matrix dimensions."""
 
-        for t in range(0, len(params)):
-            param = params[t]
-            """np.matrix: Parameter to differentiate in current iteration."""
-            grad = grads[t]
-            """np.matrix: `param`'s numerical gradient."""
-            n, m = grad.shape
-            """np.matrix: Current parameter's matrix dimensions."""
+                for i in range(0, n):
+                    for j in range(0, m):
+                        param[i, j] += eps  # Increase current partial
+                                            # derivative.
 
-            for i in range(0, n):
-                for j in range(0, m):
-                    param[i, j] += eps  # Increase current partial derivative.
+                        err2 = self.evaluate(X, Y, params=params)[0]
+                        grad[i, j] = (err2 - err1) / eps  # Numerical gradient.
 
-                    err2 = self.evaluate(X, Y, params=params, **kwargs)[0]
-                    grad[i, j] = (err2 - err1) / eps  # Numerical gradient.
+                        param[i, j] -= eps  # Revert to initial value.
 
-                    param[i, j] -= eps  # Revert to initial value.
+            return tuple(grads)
 
-        return tuple(grads)
+        return self._update_model(action, X=X, Y=Y, params=params)
 
     def regularization(self, params=None):
         """Regularization Calculator.
@@ -300,27 +331,96 @@ class Model(object):
             Implement other kinds of regularization e.g. lasso.
 
         """
-        if not params:
-            params = self.params
+        def action():
+            """Regularization Update Action.
 
-        if type(params) != tuple:
-            raise _InvalidModelParametersError(params)
+            Defines the routine to run after the feature sets and parameters
+            have been validated.
 
-        for p in params:
-            if type(p) != np.matrix or p.size == 0:
-                raise _InvalidModelParametersError(params)
+            Returns:
+                (float, np.matrix): The evaluation error along with the
+                    predicted observations.
 
-        r = self._regularization
-        """float: L2 regularization constant."""
+            """
+            r = self._regularization
+            """float: L2 regularization constant."""
 
-        left_multiply = lambda p: compose(p.T.dot, diagonal)(p.shape[0], r)
-        """callable: Left multiplies a matrix with the specified diagonal
-        matrix."""
+            left_multiply = lambda p: compose(p.T.dot, diagonal)(p.shape[0], r)
+            """callable: Left multiplies a matrix with the specified diagonal
+            matrix."""
 
-        penalizer = lambda p: float(left_multiply(p).dot(p))
-        """callable: Given a parameter, computes it's L2 penalty."""
+            penalizer = lambda p: float(left_multiply(p).dot(p))
+            """callable: Given a parameter, computes it's L2 penalty."""
 
-        return compose(sum, map)(penalizer, params)
+            return compose(sum, map)(penalizer, self.params)
+
+        return self._update_model(action, params=params)
+
+    def _update_model(self, action, **kwargs):
+        """Model Update Helper.
+
+        Runs the specified action only after validating the given datasets
+        and/or model parameters. Unless the `no_params` flag is set, the model
+        parameters will be changed to the given `params` but will get reverted
+        as soon as `action` returns.
+
+        Args:
+            action (callable): Consequence of successful argument validation.
+            **kwargs: Feature set `X`, observation set `Y`, model parameters
+                `params`, and/or the flag `no_params`.
+
+        Returns:
+            Whatever gets returned by `action`.
+
+        Raises:
+            AttributeError: If neither datasets nor parameters were provided.
+            IncompleteModelError: If flag `no_params` is inactive and no
+                valid parameters could be inferred.
+
+        """
+        has_params = "no_params" not in kwargs
+        """bool: Whether to look for parameters."""
+
+        if len(kwargs) == 0 or (len(kwargs) == 1 and not has_params):
+            raise AttributeError("Update requires at least a feature set and "
+                                 "an observation or a parameter tuple.")
+
+        # Validate datasets (if needed)
+        if "X" in kwargs and "Y" in kwargs:
+            validate_datasets(kwargs["X"], kwargs["Y"])
+        else:
+            if "X" in kwargs:
+                validate_feature_set(kwargs["X"])
+
+            if "Y" in kwargs:
+                validate_observation_set(kwargs["Y"])
+
+        # If parameters should be found, infer them from the arguments and
+        # current value for `self.params`.
+        if has_params:
+            old_params = self.params
+            """tuple of np.matrix: Reference to current trained parameters."""
+
+            new_params = kwargs["params"] if "params" in kwargs and kwargs["params"] else old_params
+            """tuple of np.matrix: Parameters to use within `action`."""
+
+            if not new_params:
+                raise _IncompleteModelError("Model parameters not set.")
+
+            self.params = new_params
+
+        # Validation was successful, so run given action and track whatever gets
+        # returned.
+        result = action()
+
+        # Revert back to original model parameters.
+        if has_params:
+            if old_params:
+                self.params = old_params
+            else:
+                del self.params
+
+        return result
 
     @abstractmethod
     def gradient(self, X, Y, **kwargs):
@@ -391,301 +491,3 @@ class Model(object):
 
         """
         pass
-
-
-class _Test(_ModuleTestCase):
-    """Model Unit Tester.
-
-    Runs tests for all common properties and methods of model implementations:
-        - `params`
-
-    """
-    def tearDown(self):
-        """Model Testing Destructor.
-
-        Cleans up of after running each specific model test.
-
-        """
-        del self.model.params
-
-        # Model parameters should be uninitialized after deletion.
-        self.assertIsNone(self.model.params)
-
-    def test_edge_cases_model_params(self):
-        """`Model.params`: Edge Case Validator.
-
-        Tests the behavior of `params` with edge cases.
-
-        Raises:
-            Exception: If at least one `Exception` raised is not of the expected
-                kind.
-
-        """
-        with self.assertRaises(_InvalidModelParametersError):
-            # Empty matrix instead of list of matrices `new_params`.
-            self.model.params = [np.matrix([[]])]
-
-        # Model parameters should still be uninitialized.
-        self.assertIsNone(self.model.params)
-
-    def test_edge_cases_model_augment(self):
-        """`Model.augment`: Edge Case Validator.
-
-        Tests the behavior of `augment` with edge cases.
-
-        Raises:
-            Exception: If at least one `Exception` raised is not of the expected
-                kind.
-
-        """
-        with self.assertRaises(_InvalidFeatureSetError):
-            # Empty matrix instead of matrix `X`.
-            self.model.augment(np.matrix([[]]))
-
-    def test_edge_cases_model_regularization(self):
-        """`Model.regularization`: Edge Case Validator.
-
-        Tests the behavior of `regularization` with edge cases.
-
-        Raises:
-            Exception: If at least one `Exception` raised is not of the expected
-                kind.
-
-        """
-        with self.assertRaises(_InvalidModelParametersError):
-            # Tuple of empty matrices.
-            self.model.regularization((np.matrix([[]]), np.matrix([[]])))
-
-    def test_invalid_args_model_params(self):
-        """`Model.params`: Argument Validator.
-
-        Tests the behavior of `params` with invalid argument counts and values.
-
-        Raises:
-            Exception: If at least one `Exception` raised is not of the expected
-                kind.
-
-        """
-        n, d = self.data_shape
-        """(int, int): Number of data points and number of features."""
-
-        with self.assertRaises(_InvalidModelParametersError):
-            params = map(random_matrix, self.shapes)
-            """list of np.matrix: Zero-valued parameters."""
-
-            # Insert extra parameter.
-            params.append(params[0])
-
-            # More parameters than expected.
-            self.model.params = params
-
-        # Model parameters should still be uninitialized.
-        self.assertIsNone(self.model.params)
-
-        with self.assertRaises(_InvalidModelParametersError):
-            # `None` instead of list of matrices `new_params`.
-            self.model.params = None
-
-        # Model parameters should still be uninitialized.
-        self.assertIsNone(self.model.params)
-
-        with self.assertRaises(_InvalidModelParametersError):
-            # Matrix instead of list of matrices `new_params`.
-            self.model.params = np.matrix((n, d))
-
-        # Model parameters should still be uninitialized.
-        self.assertIsNone(self.model.params)
-
-        with self.assertRaises(_InvalidModelParametersError):
-            # Tuple instead of list of matrices `new_params`.
-            self.model.params = np.matrix((n, d)), np.matrix((n, d))
-
-        # Model parameters should still be uninitialized.
-        self.assertIsNone(self.model.params)
-
-        with self.assertRaises(_InvalidModelParametersError):
-            # List of empty lists instead of list of matrices `new_params`.
-            self.model.params = [[], [], []]
-
-        # Model parameters should still be uninitialized.
-        self.assertIsNone(self.model.params)
-
-        with self.assertRaises(_InvalidModelParametersError):
-            # List of empty list instead of list of matrices `new_params`.
-            self.model.params = [[]]
-
-        # Model parameters should still be uninitialized.
-        self.assertIsNone(self.model.params)
-
-    def test_invalid_args_model_augment(self):
-        """`Model.augment`: Argument Validator.
-
-        Tests the behavior of `augment` with invalid argument counts and values.
-
-        Raises:
-            Exception: If at least one `Exception` raised is not of the expected
-                kind.
-
-        """
-        n, d = self.data_shape
-        """(int, int): Number of data points and number of features."""
-
-        with self.assertRaises(TypeError):
-            # No arguments.
-            self.model.augment()
-
-        with self.assertRaises(TypeError):
-            # More parameters than expected.
-            self.model.augment(12, 12)
-
-        with self.assertRaises(_InvalidFeatureSetError):
-            # `None` instead of matrix `X`.
-            self.model.augment(None)
-
-        with self.assertRaises(_InvalidFeatureSetError):
-            # Integer instead of matrix `X`.
-            self.model.augment(123)
-
-        with self.assertRaises(_InvalidFeatureSetError):
-            # 1-Tuple of a matrix instead of matrix `X`.
-            self.model.augment((random_matrix((n, d)),))
-
-        with self.assertRaises(_InvalidFeatureSetError):
-            # List of an empty list instead of matrix `X`.
-            self.model.augment([[]])
-
-        with self.assertRaises(_InvalidFeatureSetError):
-            # Array instead of matrix `X`.
-            self.model.augment(np.ndarray(n))
-
-    def test_invalid_args_model_regularization(self):
-        """`Model.regularization`: Argument Validator.
-
-        Tests the behavior of `regularization` with invalid argument counts and values.
-
-        Raises:
-            Exception: If at least one `Exception` raised is not of the expected
-                kind.
-
-        """
-        params = compose(tuple, map)(random_matrix, self.shapes)
-        """tuple of np.matrix: Random-valued parameters."""
-
-        with self.assertRaises(_InvalidModelParametersError):
-            # No arguments with no parameters set.
-            self.model.regularization()
-
-        with self.assertRaises(TypeError):
-            # Too many arguments.
-            self.model.regularization(params, params)
-
-        with self.assertRaises(TypeError):
-            # Too many arguments.
-            self.model.regularization(params, params=params)
-
-        with self.assertRaises(TypeError):
-            # Invalid kwarg.
-            self.model.regularization(params=params, key="value")
-
-        with self.assertRaises(_InvalidModelParametersError):
-            # List instead of parameter tuple `params`.
-            self.model.regularization(list(params))
-
-        with self.assertRaises(_InvalidModelParametersError):
-            # Empty list tuple instead of parameter tuple `params`.
-            self.model.regularization(params=([], []))
-
-    def test_random_model_params(self):
-        """`Model.params`: Randomized Validator.
-
-        Tests the behavior of `params` by feeding it randomly generated
-        arguments.
-
-        Raises:
-            AssertionError: If `params` needs debugging.
-
-        """
-        for i in range(0, self.n_tests):
-            random_params = compose(tuple, map)(random_matrix, self.shapes)
-            """list of np.matrix: Randomized set of parameters."""
-
-            self.model.params = random_params
-
-            params = self.model.params
-            """list of np.matrix: Deep copy of newly set parameters."""
-
-            # Parameters should be a tuple.
-            self.assertEqual(type(params), tuple)
-
-            # Number of parameters should match number of parameter dimensions.
-            self.assertEqual(len(params), len(self.shapes))
-
-            for j in range(len(params)):
-                # Each parameter should be a matrix.
-                self.assertEqual(type(params[j]), np.matrix)
-
-                # Each parameter from input should match the correspoding
-                # parameter copied with the getter method.
-                self.assertEqual(np.linalg.norm(params[j]),
-                                 np.linalg.norm(random_params[j]))
-
-            # Model parameters should be initialized at this point.
-            self.assertIsNotNone(self.model.params)
-
-            del self.model.params
-
-            # Model parameters should be uninitialized after deletion.
-            self.assertIsNone(self.model.params)
-
-    def test_random_model_augment(self):
-        """`Model.augment`: Randomized Validator.
-
-        Tests the behavior of `augment` by feeding it randomly generated
-        arguments.
-
-        Raises:
-            AssertionError: If `augment` needs debugging.
-
-        """
-        for i in range(0, self.n_tests):
-            X = random_matrix(self.data_shape)
-            """np.matrix: Random-valued matrix."""
-
-            new_X = self.model.augment(X)
-            """np.matrix: Test input."""
-
-            # Augmentation should also be a matrix.
-            self.assertEqual(type(X), np.matrix)
-
-            # Total number of values in augmented matrix should be greter than
-            # or equal to the number of values in the original matrix.
-            if new_X.shape[0] != X.shape[0] or new_X.shape[1] != X.shape[1]:
-                self.assertGreaterEqual(new_X.shape[0], X.shape[0])
-                self.assertGreaterEqual(new_X.shape[1], X.shape[1])
-
-    def test_random_model_regularization(self):
-        """`Model.regularization`: Randomized Validator.
-
-        Tests the behavior of `regularization` by feeding it randomly generated
-        arguments.
-
-        Raises:
-            AssertionError: If `regularization` needs debugging.
-
-        """
-        for i in range(0, self.n_tests):
-            random_params = compose(tuple, map)(random_matrix, self.shapes)
-            """tuple of np.matrix: Random-valued parameters."""
-
-            # First, test `params` as a method argument.
-            result = self.model.regularization(random_params)
-            """float: Test input."""
-
-            self.assertEqual(type(result), float)
-
-            # Finally, test `params` as attribute.
-            self.model.params = random_params
-
-            result = self.model.regularization()
-
-            self.assertEqual(type(result), float)

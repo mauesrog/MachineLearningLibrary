@@ -1,10 +1,10 @@
 import unittest as _unittest
 
-from augmentors import Test as _AugmentorsTest
-from general import Test as _GeneralUtilsTest
-from linalg import Test as _LinearAlgebraUtilsTest
-from loss import Test as _LossTest
-from stats import Test as _StatsTest
+from testaugmentors import Test as _AugmentorsTest
+from testgeneral import Test as _GeneralUtilsTest
+from testlinalg import Test as _LinearAlgebraUtilsTest
+from testloss import Test as _LossTest
+from teststats import Test as _StatsTest
 
 
 __all__ = ['UtilsTestSuite']
