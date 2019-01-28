@@ -1,8 +1,10 @@
 import unittest as _unittest
 
-from linear import Test as _LinearModelTest
+from testlinear import Test as _LinearModelTest
 
 
 __all__ = ['ModelsTestSuite']
 
-ModelsTestSuite = _unittest.TestSuite([_LinearModelTest])
+_tests = [_LinearModelTest]
+
+ModelsTestSuite = _unittest.TestSuite(_tests)
