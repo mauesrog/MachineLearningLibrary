@@ -6,11 +6,12 @@ linear solutions.
 """
 import numpy as _np
 
-from model import Model as _Model
-from utils.augmentors import constant_augmentor as  _constant_augmentor
+from model import Model
+from utils.augmentors import constant_augmentor
+from utils.linalg import diagonal, random_matrix
+from common.exceptions import InvalidModelParametersError
 
-
-class LinearModel(_Model):
+class LinearModel(Model):
     """Linear Model.
 
     Implements abstract class `Model` to perform learning operations according
@@ -19,9 +20,6 @@ class LinearModel(_Model):
     Note:
         See base class for attribute inheritance details. Only class-specific
         attributes are listed here.
-
-    Attributes:
-        _a (np.matrix): Linear weigths.
 
     """
     def __init__(self, regularization):
@@ -37,44 +35,100 @@ class LinearModel(_Model):
     def augment(self, X):
         """Enables linear combinations with constants by adding a column of
         unit-valued features to the given feature set."""
-        new_X = _constant_augmentor(X)
+        new_X = constant_augmentor(X)
         """np.matrix: Augmented feature set."""
 
         return super(LinearModel, self).augment(new_X)
 
     def gradient(self, X, Y, params=None):
         """See base class."""
-        a = self._a if params is None else params[0]
-        """np.matrix: Linear weights."""
+        def action():
+            """Gradient Update Action.
 
-        if a is None:
-            raise ValueError('Cannot compute gradient with no linear weights set!')
+            Defines the routine to run after the feature sets and parameters
+            have been validated.
 
-        n, d = X.shape
-        Y_hat = self.predict(X, params=[a])
+            Returns:
+                tuple of np.matrix: Parameter gradients.
 
-        grad = -2.0 * (X.T.dot(Y - Y_hat) - self._regularization * a)
+            """
+            a = self.params[0]
+            """np.matrix: Linear weights."""
 
-        return [grad]
+            n, d = X.shape
+            """(int, int): Number of data points and number of features."""
+
+            Y_hat = self.predict(X, params=(a,))
+            """np.matrix: Observation predictions."""
+
+            delta_Y = Y - Y_hat
+            """np.matrix: Difference between observations and predictions."""
+
+            return (-2.0 * (X.T.dot(delta_Y) - self._regularization * a),)
+
+        return super(LinearModel,
+                     self)._update_model(action, X=X, Y=Y, params=params)
+
+    def init_params(self, X):
+        """See base class.
+
+        Args:
+            X (np.matrix): Feature set. Shape: n x d.
+
+        """
+        shape_fn = lambda X: ((X.shape[1], 1),)
+        """callable: Returns matrix dimensions from feature sets."""
+
+        super(LinearModel, self).init_params(X, shape_fn)
 
     def predict(self, X, params=None):
         """See base class."""
-        a = self._a if params is None else params[0]
-        """np.matrix: Linear weights."""
+        def action():
+            """Predict Update Action.
 
-        if a is None:
-            raise ValueError('Cannot predict with no linear weights set!')
+            Defines the routine to run after the feature sets and parameters
+            have been validated.
 
-        return _np.matrix(X.dot(a))
+            Returns:
+                np.matrix: Predicted observations.
 
-    def train(self, X, Y, exact=False, params=None):
+            Raises:
+                InvalidModelParametersError: If the parameters provided are not
+                    compatible with the given feature set.
+
+            """
+            a = self.params[0]
+            """np.matrix: Linear weights."""
+
+            try:
+                return X.dot(a)
+            except ValueError:
+                reason = "Linear weights' size %s does not match feature set " \
+                         "size %s." % (a.shape, X.shape)
+                raise InvalidModelParametersError((a,), reason=reason)
+
+        return super(LinearModel,
+                     self)._update_model(action, X=X, params=params)
+
+    def train(self, X, Y):
         """See base class."""
-        n, d = X.shape
+        def action():
+            """Train Update Action.
 
-        if not exact:
-            self._a = _np.random.rand(d, 1)
-            return None
+            Defines the routine to run after the feature sets and parameters
+            have been validated.
 
-        self._a = _np.matrix(X.T.dot(X) + self._regularization * _np.identity(d)).I.dot(X.T).dot(Y)
+            Returns:
+                float: The evaluation error along with the predicted
+                    observations.
 
-        return self.evaluate(X, Y)[0]
+            """
+            reg = diagonal(X.shape[1], self._regularization)
+            """np.matrix: Diagonal L2 regularization matrix"""
+
+            self.params = (_np.matrix(X.T.dot(X) + reg).I.dot(X.T).dot(Y),)
+
+            return self.evaluate(X, Y)[0]
+
+        return super(LinearModel, self)._update_model(action, X=X, Y=Y,
+                                                      no_params=True)

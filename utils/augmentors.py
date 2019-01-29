@@ -6,6 +6,7 @@ Defines functions that augment feature sets.
 import numpy as _np
 
 from linalg import append_left as _append_left
+from stats import validate_feature_set
 from common.exceptions import InvalidFeatureSetError as _InvalidFeatureSetError
 
 
@@ -26,14 +27,10 @@ def constant_augmentor(X):
         InvalidFeatureSetError: If feature set is somehow invalid.
 
     """
-    if type(X) != _np.matrix:
-        raise _InvalidFeatureSetError(X, isType=True)
-
-    if X.size == 0:
-        reason = "Cannot augment empty matrix!"
-        raise _InvalidFeatureSetError(X, reason=reason)
+    validate_feature_set(X)
 
     v = _np.matrix(_np.ones((X.shape[0], 1)))
     """np.matrix: Unit-valued vector to append to feature set."""
+
 
     return _append_left(X, v)

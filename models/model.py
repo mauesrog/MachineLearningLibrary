@@ -5,14 +5,15 @@ mathematical models to implement.
 
 Attributes:
     eps (float): Step size of all numerical gradients.
-    DEFAULT_SHAPE_GRADIENT_CHECKER ((int, int)): Size of random matrices used
-        within `gradient_checker`.
+    DEFAULT_SHAPE_CHECKER ((int, int)): Size of random matrices used within
+        `gradient_checker`.
 
 """
 
 from copy import deepcopy as _deepcopy
 from abc import ABCMeta, abstractmethod
 import numpy as np
+from matplotlib import pyplot as plt
 
 from utils import loss as losses
 from utils.stats import validate_datasets, validate_feature_set, \
@@ -25,8 +26,8 @@ from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSets
                               InvalidModelParametersError as _InvalidModelParametersError, \
                               InvalidObservationSetError as _InvalidObservationSetError
 
-eps = 1e-6
-DEFAULT_SHAPE_GRADIENT_CHECKER = (10, 200)
+eps = 1e-7
+DEFAULT_SHAPE_CHECKER = (200, 10)
 
 
 class Model(object):
@@ -204,8 +205,7 @@ class Model(object):
 
         return self._update_model(action, X=X, Y=Y, params=params)
 
-    def gradient_checker(self, perturbations,
-                         shape=DEFAULT_SHAPE_GRADIENT_CHECKER):
+    def gradient_checker(self, perturbations, shape=DEFAULT_SHAPE_CHECKER):
         """Model Gradient Validator.
 
         Checks the accuracy of the analytical computation of all gradients
@@ -216,7 +216,7 @@ class Model(object):
             perturbations (int): Number of comparison points to consider in
                 norm computation.
             shape ((int, int), optional): Number of data points and number of
-                features. Defaults to `DEFAULT_SHAPE_GRADIENT_CHECKER`.
+                features. Defaults to `DEFAULT_SHAPE_CHECKER`.
 
         Returns:
             (list of float, list of float): Norms for all analytical and
@@ -225,33 +225,65 @@ class Model(object):
         """
         n, d = shape
         """(int, int): Number of data points and number of features."""
-        grad_norms = [0.0 for i in range(0, perturbations)]
-        """list of float: Norms of all analytical gradients."""
-        ngrad_norms = [0.0 for i in range(0, perturbations)]
-        """list of float: Norms of all numerical gradients."""
 
-        # Delete parameters and create random new ones with the specified number
-        # of features.
-        del self.params
-        self.train(np.matrix(np.zeros((1, d))), None, exact=False)
+        def action():
+            """Gradient Checker Update Action.
 
-        for i in range(0, perturbations):
-            X = random_matrix((n, d))
-            """np.matrix: Random-valued feature set."""
-            Y = random_matrix((n, 1))
-            """np.matrix: Random-valued observation set."""
+            Defines the routine to run after the feature sets and parameters
+            have been validated.
 
-            grads = self.gradient(X, Y)
-            """tuple of np.matrix: Analytical gradients."""
-            ngrads = self.numerical_gradient(X, Y)
-            """tuple of np.matrix: Numberical gradients."""
+            Returns:
+                (list of float, list of float): The evaluation error along with
+                    the predicted observations.
 
-            # Add gradient norms to norm totals.
-            for j in range(0, len(grads)):
-                grad_norms[i] += np.linalg.norm(grads[j]) ** 2
-                ngrad_norms[i] += np.linalg.norm(ngrads[j]) ** 2
+            """
+            grad_norms = [0.0 for i in range(0, perturbations)]
+            """list of float: Norms of all analytical gradients."""
+            ngrad_norms = [0.0 for i in range(0, perturbations)]
+            """list of float: Norms of all numerical gradients."""
 
-        return grad_norms, ngrad_norms
+            for i in range(0, perturbations):
+                X = random_matrix((n, d), min_val=0.0, max_val=1.0)
+                """np.matrix: Random-valued feature set."""
+                Y = random_matrix((n, 1), min_val=0.0, max_val=1.0)
+                """np.matrix: Random-valued observation set."""
+
+                grads = self.gradient(X, Y)
+                """tuple of np.matrix: Analytical gradients."""
+                ngrads = self.numerical_gradient(X, Y)
+                """tuple of np.matrix: Numberical gradients."""
+
+                # Add gradient norms to norm totals.
+                for j in range(0, len(grads)):
+                    grad_norms[i] += np.linalg.norm(grads[j]) ** 2
+                    ngrad_norms[i] += np.linalg.norm(ngrads[j]) ** 2
+
+            return grad_norms, ngrad_norms
+
+        params = (random_matrix((d, 1), min_val=0.0, max_val=1.0),)
+        """tuple of np.matrix: Random-valued parameters."""
+
+        return self._update_model(action, params=params)
+
+    def init_params(self, X, shape_fn):
+        """Model Parameter Intializer.
+
+        Given a feature set, intializes all parameters to random values.
+
+        Args:
+            shape_fn (callable): Returns matrix dimensions from feature sets.
+
+        """
+        def action():
+            """Initialize Parameters Update Action.
+
+            Defines the routine to run after the feature sets have been
+            validated.
+
+            """
+            self.params = compose(tuple, map)(random_matrix, shape_fn(X))
+
+        self._update_model(action, X=X, no_params=True)
 
     def numerical_gradient(self, X, Y, params=None):
         """Model Numerical Differentiator.
@@ -411,7 +443,16 @@ class Model(object):
 
         # Validation was successful, so run given action and track whatever gets
         # returned.
-        result = action()
+        try:
+            result = action()
+        except Exception as e:
+            if has_params:
+                if old_params:
+                    self.params = old_params
+                else:
+                    del self.params
+
+            raise e
 
         # Revert back to original model parameters.
         if has_params:
@@ -423,7 +464,7 @@ class Model(object):
         return result
 
     @abstractmethod
-    def gradient(self, X, Y, **kwargs):
+    def gradient(self, X, Y, params=None):
         """Model Analytical Differentiator.
 
         Given sets of features and observations, computes the exact gradient of
@@ -447,7 +488,7 @@ class Model(object):
         pass
 
     @abstractmethod
-    def predict(self, X, **kwargs):
+    def predict(self, X, params=None):
         """Model Predictor.
 
         Given a set of features, predicts observations based on the current
@@ -455,10 +496,9 @@ class Model(object):
 
         Args:
             X (np.matrix): Feature set. Shape: n x d.
-            **kwargs: Additional parameters needed by the specific model to
-                predict observations based on the given feature set. Parameters
-                specified with the key 'params' will replace the default trained
-                parameters saved by the model.
+            params (tuple of np.matrix, optional): Parameters to use for
+                evaluation. Defaults to `None`, which implies that the current
+                trained parameters (i.e. `self.params`) will be used.
 
         Returns:
             np.matrix: Predicted observations derived from features.
@@ -470,7 +510,7 @@ class Model(object):
         pass
 
     @abstractmethod
-    def train(self, X, Y, **kwargs):
+    def train(self, X, Y):
         """Model Trainer.
 
         Uses the given sets of features and observations to compute the global
@@ -478,13 +518,12 @@ class Model(object):
         parameters.
 
         Note:
-            This method is unfeasible with large datasets, it is virtually for
+            This method is unfeasible with large datasets, it is basically for
             testing purposes only.
 
         Args:
             X (np.matrix): Feature set. Shape: n x d.
             Y (np.matrix): Observation set. Shape: n x 1.
-            **kwargs: Additional parameters needed to train the specific model.
 
         Returns:
             float: Training error.
