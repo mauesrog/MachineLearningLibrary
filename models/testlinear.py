@@ -42,7 +42,7 @@ class _Test(_ModelTest):
         self.data_shape = 100, 20
         self.label = '`linear.LinearModel`'
         self.model = _LinearModel(0.5)
-        self.n_tests = 20
+        self.n_tests = 50
         self.name = __name__
         self.shapes = tuple([(20, 1)])
 

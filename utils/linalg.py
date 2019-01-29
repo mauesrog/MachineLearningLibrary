@@ -2,12 +2,21 @@
 
 Defines common linear algebra routines frequently used by learning models.
 
+Attributes:
+    DEFAULT_MAX_RANDOM_VALUE (float): Default maximum random number allowed.
+    DEFAULT_MIN_RANDOM_VALUE (float): Default minimum random number allowed.
+
 """
 import numpy as _np
 
 from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSetsError, \
                               InvalidFeatureSetError as _InvalidFeatureSetError
 from general import compose
+from stats import validate_feature_set
+
+
+DEFAULT_MAX_RANDOM_VALUE = 100.0
+DEFAULT_MIN_RANDOM_VALUE = 0.0
 
 
 def append_bottom(X, v):
@@ -100,7 +109,8 @@ def diagonal(n, val=1.0):
     # specified constant does the trick.
     return _np.matrix(val * _np.identity(n))
 
-def random_matrix(size, min_val=0.0, max_val=1.0):
+def random_matrix(size, min_val=DEFAULT_MIN_RANDOM_VALUE,
+                  max_val=DEFAULT_MAX_RANDOM_VALUE):
     """Random Matrix Generator.
 
     Creates a matrix of the given size with values determined by the specified
@@ -168,17 +178,7 @@ def _append_helper(X, v, position):
         InvalidFeatureSetError: If the given feature set or vector are invalid.
 
     """
-    if type(X) != _np.matrix:
-        raise _InvalidFeatureSetError(X, isType=True)
-
-    if X.size == 0:
-        raise _InvalidFeatureSetError(X, reason="Cannot augment empty matrix!")
-
-    if type(v) != _np.matrix:
-        raise _InvalidFeatureSetError(v, isType=True)
-
-    if v.size == 0:
-        raise _InvalidFeatureSetError(v, reason="Received empty column vector.")
+    map(validate_feature_set, [X, v])
 
     switcher=dict(bottom=((X, v), 0), left=((v, X), 1), right=((X, v), 1),
                   top=((v, X), 0))
