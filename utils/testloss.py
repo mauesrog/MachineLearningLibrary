@@ -9,7 +9,8 @@ from common.test_cases.module_test_case import ModuleTestCase as _ModuleTestCase
 from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSetsError, \
                               InvalidObservationSetError as _InvalidObservationSetError
 from linalg import random_matrix as _random_matrix
-from loss import mse 
+from loss import mse
+
 
 class _Test(_ModuleTestCase):
     """Loss Function Unit Tester.

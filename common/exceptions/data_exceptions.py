@@ -1,4 +1,7 @@
+from config import exception_defaults
+
 DEFAULT_DATA_SET_ERROR_MESSAGE = "Unknown reason."
+DEFAULT_INCOMPATIBLE_MSG = exception_defaults["incompatible_message"]
 
 
 class IncompatibleDataSetsError(Exception):
@@ -14,7 +17,7 @@ class IncompatibleDataSetsError(Exception):
         sets ((np.matrix, np.matrix)): The two incompatible datasets.
 
     """
-    def __init__(self, X, Y, operation):
+    def __init__(self, X, Y, operation=DEFAULT_INCOMPATIBLE_MSG):
         """Incompatible Data Sets Error Constructor.
 
         Args:

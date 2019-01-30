@@ -4,12 +4,16 @@ Implements an L2-regularized learning model exclusively capable of finding
 linear solutions.
 
 """
-import numpy as _np
+import numpy as np
 
+from config import model_defaults
 from model import Model
 from utils.augmentors import constant_augmentor
 from utils.linalg import diagonal, random_matrix
 from common.exceptions import InvalidModelParametersError
+
+DEFAULT_REGULARIZATION = model_defaults["regularization"]
+
 
 class LinearModel(Model):
     """Linear Model.
@@ -21,8 +25,11 @@ class LinearModel(Model):
         See base class for attribute inheritance details. Only class-specific
         attributes are listed here.
 
+    Attributes:
+        _a (np.matrix): Linear weights.
+
     """
-    def __init__(self, regularization):
+    def __init__(self, regularization=DEFAULT_REGULARIZATION):
         """Linear Model Constructor.
 
         Args:
@@ -52,19 +59,16 @@ class LinearModel(Model):
                 tuple of np.matrix: Parameter gradients.
 
             """
-            a = self.params[0]
-            """np.matrix: Linear weights."""
-
             n, d = X.shape
             """(int, int): Number of data points and number of features."""
 
-            Y_hat = self.predict(X, params=(a,))
+            Y_hat = self.predict(X)
             """np.matrix: Observation predictions."""
 
             delta_Y = Y - Y_hat
             """np.matrix: Difference between observations and predictions."""
 
-            return (-2.0 * (X.T.dot(delta_Y) - self._regularization * a),)
+            return (-2.0 * (X.T.dot(delta_Y) - self._regularization * self._a),)
 
         return super(LinearModel,
                      self)._update_model(action, X=X, Y=Y, params=params)
@@ -97,15 +101,12 @@ class LinearModel(Model):
                     compatible with the given feature set.
 
             """
-            a = self.params[0]
-            """np.matrix: Linear weights."""
-
             try:
-                return X.dot(a)
+                return X.dot(self._a)
             except ValueError:
                 reason = "Linear weights' size %s does not match feature set " \
-                         "size %s." % (a.shape, X.shape)
-                raise InvalidModelParametersError((a,), reason=reason)
+                         "size %s." % (self._a.shape, X.shape)
+                raise InvalidModelParametersError(self.params, reason=reason)
 
         return super(LinearModel,
                      self)._update_model(action, X=X, params=params)
@@ -126,7 +127,7 @@ class LinearModel(Model):
             reg = diagonal(X.shape[1], self._regularization)
             """np.matrix: Diagonal L2 regularization matrix"""
 
-            self.params = (_np.matrix(X.T.dot(X) + reg).I.dot(X.T).dot(Y),)
+            self.params = (np.matrix(X.T.dot(X) + reg).I.dot(X.T).dot(Y),)
 
             return self.evaluate(X, Y)[0]
 

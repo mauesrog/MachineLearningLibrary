@@ -9,6 +9,7 @@ from common.exceptions import InvalidFeatureSetError as _InvalidFeatureSetError,
                               InvalidObservationSetError as _InvalidObservationSetError
 from stats import batches, normalize, partition_data
 
+
 class _Test(_ModuleTestCase):
     """Statistical Utilities Unit Tester.
 

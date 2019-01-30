@@ -16,9 +16,6 @@ class _Test(_ModelTest):
     Runs tests for all properties and methods of `Model`, plus those particular
     to `LinearModel`:
         - `augment`
-        - `gradient`
-        - `predict`
-        - `train`
 
     Attributes:
         cutoff_zero (float): The largest value treated as zero in all equality

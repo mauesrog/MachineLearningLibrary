@@ -3,20 +3,20 @@
 Defines common linear algebra routines frequently used by learning models.
 
 Attributes:
-    DEFAULT_MAX_RANDOM_VALUE (float): Default maximum random number allowed.
-    DEFAULT_MIN_RANDOM_VALUE (float): Default minimum random number allowed.
+    See `config.linalg`.
 
 """
 import numpy as _np
 
+from config import linalg_defaults
 from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSetsError, \
                               InvalidFeatureSetError as _InvalidFeatureSetError
 from general import compose
 from stats import validate_feature_set
 
 
-DEFAULT_MAX_RANDOM_VALUE = 100.0
-DEFAULT_MIN_RANDOM_VALUE = 0.0
+DEFAULT_MAX_RANDOM_VALUE = linalg_defaults["max_random_value"]
+DEFAULT_MIN_RANDOM_VALUE = linalg_defaults["min_random_value"]
 
 
 def append_bottom(X, v):
