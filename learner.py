@@ -3,31 +3,25 @@
 Abstracts all training and testing from the actual mathematical models.
 
 Attributes:
-    DEFAULT_DECAY_RATE (float): Default positive rate at which SGD's update rule
-        should descend.
-    DEFAULT_DECAY_RATE (float): Default positive rate at which SGD's learning
-        rate should decline.
-    DEFAULT_MAX_EPOCHES (int): Default maximum number of epoches before
-        interrupting the descent.
-    DEFAULT_SGD_K (int): Default number of buckets to use in k-bucket SGD.
-    MIN_DELTA_EPOCH (float): Smallest accepted difference in model loss from
-        one epoch to the next.
     models (:obj:`Model`): All available learning models.
+
+    See `config.models`.
 
 """
 from matplotlib import pyplot as plot
 import numpy as np
 from copy import deepcopy
 
+from config import learner_defaults
 from utils.stats import batches
 from models.linear import LinearModel
 
 
-DEFAULT_DECAY_RATE = 0.5
-DEFAULT_LEARNING_RATE = 1e-3
-DEFAULT_MAX_EPOCHES = 1e4
-DEFAULT_SGD_K = 50
-MIN_DELTA_EPOCH = 1e-6
+DEFAULT_DECAY_RATE = learner_defaults["decay_rate"]
+DEFAULT_LEARNING_RATE = learner_defaults["learning_rate"]
+DEFAULT_MAX_EPOCHES = learner_defaults["max_epoches"]
+DEFAULT_SGD_K = learner_defaults["sgd_k"]
+MIN_DELTA_EPOCH = learner_defaults["min_delta_epoch"]
 
 models = dict(Linear=LinearModel)
 
