@@ -10,6 +10,7 @@ from common.test_cases.module_test_case import ModuleTestCase as _ModuleTestCase
 from common.exceptions import InvalidFeatureSetError as _InvalidFeatureSetError
 from augmentors import constant_augmentor
 
+
 class _Test(_ModuleTestCase):
     """Augmentors Unit Tester.
 

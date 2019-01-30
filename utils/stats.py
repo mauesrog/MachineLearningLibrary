@@ -3,8 +3,7 @@
 Provides the implementation for commponly used routines in ML.
 
 Attributes:
-    DEFAULT_INCOMPATIBLE_MSG (str): Default message to include when raising an
-        exception due to dataset incompatibilty.
+    See `config.utils`.
 
 """
 import numpy as _np
@@ -13,8 +12,6 @@ from random import shuffle as _shuffle
 from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSetsError, \
                               InvalidFeatureSetError as _InvalidFeatureSetError, \
                               InvalidObservationSetError as _InvalidObservationSetError
-
-DEFAULT_INCOMPATIBLE_MSG = "anything"
 
 
 def batches(X, Y, k):
@@ -135,7 +132,7 @@ def partition_data(X, Y, f):
             and observations, respectively.
 
     """
-    validate_datasets(X, Y, "partitioning")
+    validate_datasets(X, Y, operation="partitioning")
 
     if type(f) != int and type(f) != float:
         raise TypeError("Expected 'float' or 'int' for `f`, saw '%s' instead." %
@@ -192,7 +189,7 @@ def partition_data(X, Y, f):
     return _np.matrix(train_X), _np.matrix(train_Y), _np.matrix(test_X), \
            _np.matrix(test_Y)
 
-def validate_datasets(X, Y, operation=DEFAULT_INCOMPATIBLE_MSG):
+def validate_datasets(X, Y, **kwargs):
     """Dataset Validator.
 
     Validates the given feature set and observation set for compatibility,
@@ -201,8 +198,8 @@ def validate_datasets(X, Y, operation=DEFAULT_INCOMPATIBLE_MSG):
     Args:
         X (np.matrix): Feature set. Shape: n x d.
         Y (np.matrix): Observation set. Shape: n x 1.
-        operation (str, optional): Description to include in exception in case
-            of dataset incompatibilty. Defaults to `DEFAULT_INCOMPATIBLE_MSG`.
+        **kwargs: Optinally includes description of exception in case of dataset
+            incompatibilty.
 
     Raises:
         IncompatibleDataSetsError: If the numbers of rows in `X` and `Y` do not
@@ -215,7 +212,7 @@ def validate_datasets(X, Y, operation=DEFAULT_INCOMPATIBLE_MSG):
     validate_observation_set(Y)
 
     if X.shape[0] != Y.shape[0]:
-        raise _IncompatibleDataSetsError(X, Y, "evaluation")
+        raise _IncompatibleDataSetsError(X, Y, **kwargs)
 
 def validate_feature_set(X):
     """Dataset Validator.

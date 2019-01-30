@@ -4,9 +4,7 @@ This module describes an abstraction of a learning model for specific
 mathematical models to implement.
 
 Attributes:
-    eps (float): Step size of all numerical gradients.
-    DEFAULT_SHAPE_CHECKER ((int, int)): Size of random matrices used within
-        `gradient_checker`.
+    See `config.models`.
 
 """
 
@@ -15,6 +13,7 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 from matplotlib import pyplot as plt
 
+from config import model_defaults
 from utils import loss as losses
 from utils.stats import validate_datasets, validate_feature_set, \
                         validate_observation_set
@@ -26,8 +25,8 @@ from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSets
                               InvalidModelParametersError as _InvalidModelParametersError, \
                               InvalidObservationSetError as _InvalidObservationSetError
 
-eps = 1e-7
-DEFAULT_SHAPE_CHECKER = (200, 10)
+NUM_GRAD_EPS = model_defaults["num_grad_eps"]
+DEFAULT_SHAPE_CHECKER = model_defaults["gradient_checker_shape"]
 
 
 class Model(object):
@@ -62,6 +61,19 @@ class Model(object):
 
         # Initialize all parameters to `None`.
         del self.params
+
+    def __str__(self):
+        param_to_str = (lambda name:
+            "`%s`: %s" % (name[1:], "not set"
+                                    if not hasattr(self, name) or getattr(self, name) is None
+                                    else getattr(self, name).shape)
+        )
+        """callable: Stringifies given parameter."""
+
+        param_str = compose(", ".join, map)(param_to_str, self._param_names)
+        """str: Stringified parameters."""
+
+        return "%s: %s" % (self.__class__.__name__, param_str)
 
     @property
     def params(self):
@@ -191,8 +203,8 @@ class Model(object):
             eval = loss(Y, Y_hat)
             """float: Evaluation error."""
 
-            # Only consider regularization if needed e.g. if parameters are being
-            # trained.
+            # Only consider regularization if needed e.g. if parameters are
+            # being trained.
             if regularize:
                 n = X.shape[0]
                 """int: Number of data points."""
@@ -289,7 +301,8 @@ class Model(object):
         """Model Numerical Differentiator.
 
         Given sets of features and observations, computes the numerical gradient
-        of the model parameters according to the module attribute `eps`.
+        of the model parameters according to the module attribute
+        `NUM_GRAD_EPS`.
 
         Args:
             X (np.matrix): Feature set. Shape: n x d.
@@ -333,13 +346,15 @@ class Model(object):
 
                 for i in range(0, n):
                     for j in range(0, m):
-                        param[i, j] += eps  # Increase current partial
-                                            # derivative.
+                        param[i, j] += NUM_GRAD_EPS  # Increase current partial
+                                                     # derivative.
 
                         err2 = self.evaluate(X, Y, params=params)[0]
-                        grad[i, j] = (err2 - err1) / eps  # Numerical gradient.
 
-                        param[i, j] -= eps  # Revert to initial value.
+                        # Numerical gradient.
+                        grad[i, j] = (err2 - err1) / NUM_GRAD_EPS
+
+                        param[i, j] -= NUM_GRAD_EPS  # Revert to initial value.
 
             return tuple(grads)
 
@@ -433,7 +448,9 @@ class Model(object):
             old_params = self.params
             """tuple of np.matrix: Reference to current trained parameters."""
 
-            new_params = kwargs["params"] if "params" in kwargs and kwargs["params"] else old_params
+            new_params = kwargs["params"] if \
+                         "params" in kwargs and kwargs["params"] else \
+                         old_params
             """tuple of np.matrix: Parameters to use within `action`."""
 
             if not new_params:
