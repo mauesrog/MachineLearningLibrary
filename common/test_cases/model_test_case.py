@@ -731,7 +731,7 @@ class ModelTestCase(_ModuleTestCase):
             AssertionError: If `params` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             random_params = compose(tuple, map)(random_matrix, self.shapes)
             """list of np.matrix: Randomized set of parameters."""
 
@@ -741,14 +741,14 @@ class ModelTestCase(_ModuleTestCase):
             """list of np.matrix: Deep copy of newly set parameters."""
 
             # Parameters should be a tuple.
-            self.assertEqual(type(params), tuple)
+            self.assertIsInstance(params, tuple)
 
             # Number of parameters should match number of parameter dimensions.
             self.assertEqual(len(params), len(self.shapes))
 
             for j in range(len(params)):
                 # Each parameter should be a matrix.
-                self.assertEqual(type(params[j]), np.matrix)
+                self.assertIsInstance(params[j], np.matrix)
 
                 # Each parameter from input should match the correspoding
                 # parameter copied with the getter method.
@@ -773,7 +773,7 @@ class ModelTestCase(_ModuleTestCase):
             AssertionError: If `augment` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued matrix."""
 
@@ -781,7 +781,7 @@ class ModelTestCase(_ModuleTestCase):
             """np.matrix: Test input."""
 
             # Augmentation should also be a matrix.
-            self.assertEqual(type(X), np.matrix)
+            self.assertIsInstance(X, np.matrix)
 
             # Total number of values in augmented matrix should be greter than
             # or equal to the number of values in the original matrix.
@@ -799,7 +799,7 @@ class ModelTestCase(_ModuleTestCase):
             AssertionError: If `evaluate` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
 
@@ -814,7 +814,7 @@ class ModelTestCase(_ModuleTestCase):
             """float: Test input 1."""
 
             # Gradients should be a tuple.
-            self.assertEqual(type(result1), tuple)
+            self.assertIsInstance(result1, tuple)
 
             # All params should have a gradient.
             self.assertEqual(len(result1), 2)
@@ -827,7 +827,7 @@ class ModelTestCase(_ModuleTestCase):
             self.assertEqual(type(err1), np.float64)
 
             # Prediction set should be a matrix.
-            self.assertEqual(type(Y_hat1), np.matrix)
+            self.assertIsInstance(Y_hat1, np.matrix)
 
             # Model parameters should not be set at this point.
             self.assertIsNone(self.model.params)
@@ -839,7 +839,7 @@ class ModelTestCase(_ModuleTestCase):
             """float: Test input 2."""
 
             # Gradients should be a tuple.
-            self.assertEqual(type(result2), tuple)
+            self.assertIsInstance(result2, tuple)
 
             # All params should have a gradient.
             self.assertEqual(len(result2), 2)
@@ -852,7 +852,7 @@ class ModelTestCase(_ModuleTestCase):
             self.assertEqual(type(err2), np.float64)
 
             # Prediction set should be a matrix.
-            self.assertEqual(type(Y_hat2), np.matrix)
+            self.assertIsInstance(Y_hat2, np.matrix)
 
             # Model parameters should be set at this point.
             self.assertIsNotNone(self.model.params)
@@ -873,7 +873,7 @@ class ModelTestCase(_ModuleTestCase):
 
             # Evaluation with no regularization should comply with the following
             # equation.
-            self.assertEqual(err1, err_no_reg * self.data_shape[0] + r)
+            self.assertEqual(err1, err_no_reg + r)
 
             # Predicted observations should still be identical, though.
             self.assertEqual(np.linalg.norm(Y_hat1),
@@ -892,7 +892,7 @@ class ModelTestCase(_ModuleTestCase):
 
         """
         (norms1,
-         norms2) = map(np.matrix, self.model.gradient_checker(self.n_tests))
+         norms2) = map(np.matrix, self.model._gradient_checker(self.n_tests))
         """(np.matrix, np.matrix): """
 
         # The norms of gradients generated numerically should match those
@@ -903,7 +903,7 @@ class ModelTestCase(_ModuleTestCase):
                                      np.subtract)(norms1, norms2),
                              1e-2 * self.n_tests)
 
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
 
@@ -918,14 +918,14 @@ class ModelTestCase(_ModuleTestCase):
             """float: Test input 1."""
 
             # Gradients should be a tuple.
-            self.assertEqual(type(result1), tuple)
+            self.assertIsInstance(result1, tuple)
 
             # All params should have a gradient.
             self.assertEqual(len(result1), len(self.shapes))
 
             # All gradients should matrices.
             for g in result1:
-                self.assertEqual(type(g), np.matrix)
+                self.assertIsInstance(g, np.matrix)
 
             # Model parameters should not be set at this point.
             self.assertIsNone(self.model.params)
@@ -937,14 +937,14 @@ class ModelTestCase(_ModuleTestCase):
             """float: Test input 2."""
 
             # Gradients should be a tuple.
-            self.assertEqual(type(result2), tuple)
+            self.assertIsInstance(result2, tuple)
 
             # All params should have a gradient.
             self.assertEqual(len(result2), len(self.shapes))
 
             # All gradients should matrices.
             for g in result2:
-                self.assertEqual(type(g), np.matrix)
+                self.assertIsInstance(g, np.matrix)
 
             # Model parameters should be set at this point.
             self.assertIsNotNone(self.model.params)
@@ -969,7 +969,7 @@ class ModelTestCase(_ModuleTestCase):
             AssertionError: If `numerical_gradient` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
 
@@ -984,14 +984,14 @@ class ModelTestCase(_ModuleTestCase):
             """float: Test input 1."""
 
             # Gradients should be a tuple.
-            self.assertEqual(type(result1), tuple)
+            self.assertIsInstance(result1, tuple)
 
             # All params should have a gradient.
             self.assertEqual(len(result1), len(self.shapes))
 
             # All gradients should matrices.
             for g in result1:
-                self.assertEqual(type(g), np.matrix)
+                self.assertIsInstance(g, np.matrix)
 
             # Model parameters should not be set at this point.
             self.assertIsNone(self.model.params)
@@ -1003,14 +1003,14 @@ class ModelTestCase(_ModuleTestCase):
             """float: Test input 2."""
 
             # Gradients should be a tuple.
-            self.assertEqual(type(result2), tuple)
+            self.assertIsInstance(result2, tuple)
 
             # All params should have a gradient.
             self.assertEqual(len(result2), len(self.shapes))
 
             # All gradients should matrices.
             for g in result2:
-                self.assertEqual(type(g), np.matrix)
+                self.assertIsInstance(g, np.matrix)
 
             # Model parameters should be set at this point.
             self.assertIsNotNone(self.model.params)
@@ -1035,7 +1035,7 @@ class ModelTestCase(_ModuleTestCase):
             AssertionError: If `predict` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
 
@@ -1047,7 +1047,7 @@ class ModelTestCase(_ModuleTestCase):
             """np.matrix: Test input 1."""
 
             # Gradients should be a tuple.
-            self.assertEqual(type(Y_hat1), np.matrix)
+            self.assertIsInstance(Y_hat1, np.matrix)
 
             # All params should have a gradient.
             self.assertEqual(Y_hat1.shape, (X.shape[0], 1))
@@ -1062,7 +1062,7 @@ class ModelTestCase(_ModuleTestCase):
             """np.matrix: Test input 2."""
 
             # Gradients should be a tuple.
-            self.assertEqual(type(Y_hat2), np.matrix)
+            self.assertIsInstance(Y_hat2, np.matrix)
 
             # All params should have a gradient.
             self.assertEqual(Y_hat2.shape, (X.shape[0], 1))
@@ -1085,7 +1085,7 @@ class ModelTestCase(_ModuleTestCase):
             AssertionError: If `regularization` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             random_params = compose(tuple, map)(random_matrix, self.shapes)
             """tuple of np.matrix: Random-valued parameters."""
 
@@ -1093,14 +1093,14 @@ class ModelTestCase(_ModuleTestCase):
             result = self.model.regularization(random_params)
             """float: Test input."""
 
-            self.assertEqual(type(result), float)
+            self.assertIsInstance(result, float)
 
             # Finally, test `params` as attribute.
             self.model.params = random_params
 
             result = self.model.regularization()
 
-            self.assertEqual(type(result), float)
+            self.assertIsInstance(result, float)
 
     def test_random_model_train(self):
         """`Model.train`: Randomized Validator.
@@ -1112,7 +1112,7 @@ class ModelTestCase(_ModuleTestCase):
             AssertionError: If `train` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
             Y = random_matrix((self.data_shape[0], 1))

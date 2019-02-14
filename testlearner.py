@@ -1,28 +1,36 @@
 """Learner Testing Module.
 
+Attributes:
+    Test (TestSuite): Model wrapper testing suite.
+
+Todo:
+    - Finish unit tests for `Learner`'s private methods.
+
 """
 import numpy as _np
-import math as _math
-import unittest as _unittest
-import re as _re
+from unittest import TestLoader as _TestLoader
 
+from config import data_examples as _examples
 from common.exceptions import InvalidFeatureSetError as _InvalidFeatureSetError, \
-                              InvalidModelParametersError as _InvalidModelParametersError
-from common.test_cases.module_test_case import ModuleTestCase as _ModuleTest
+                              InvalidObservationSetError as _InvalidObservationSetError
+from common.test_cases.module_test_case import ModuleTestCase as _ModuleTestCase
 from learner import Learner
 from utils.linalg import random_matrix as  _random_matrix
 from utils.general import compose as _compose
+from utils.stats import partition_data as _partition_data, \
+                        reduce_dimensions as _reduce_dimensions
 
 
-class _Test(_ModuleTest):
+class _Test(_ModuleTestCase):
     """Learner Unit Tester.
 
-    Runs tests for all properties and methods of the `Learner`class:
-        - `_update_rule`
+    Runs tests for all properties and methods of the `Learner` class:
+
+    And `ModelWrapper` class:
+        - `train`
+
 
     Attributes:
-        cutoff_zero (float): The largest value treated as zero in all equality
-            tests.
         data_shape ((int, int)): Dimensions for all auto-generated data sets.
         label (str): Identifier for super class to generate custome test
             docstrings according to the linear model module.
@@ -39,7 +47,6 @@ class _Test(_ModuleTest):
         Sets up the necessary information to begin testing.
 
         """
-        self.cutoff_zero = 1e-2
         self.data_shape = 100, 20
         self.label = '`learner.Learner`'
         self.learner = Learner()
@@ -53,203 +60,215 @@ class _Test(_ModuleTest):
         for name, ModelWrapper in self.learner:
             ModelWrapper.model = dict(X=_random_matrix(self.data_shape))
 
-            self.shapes[name] = _compose(tuple,
-                                         map)(p_to_shape,
-                                              ModelWrapper._model.params)
+            self.shapes[name] = _compose(tuple, map)(p_to_shape,
+                                                     ModelWrapper._model.params)
 
             # Model string should indicate that all parameters are set at this
             # point.
-            self._validate_model_getter(ModelWrapper, name, self._params_set)
+            self.assertIsNotNone(ModelWrapper._model.params)
 
             del ModelWrapper._model.params
 
             # Model string should indicate unset parameters at this point.
-            self._validate_model_getter(ModelWrapper, name, self._params_unset)
+            self.assertIsNone(ModelWrapper._model.params)
 
-    def test_edge_cases_model_wrapper_model(self):
-        """`Learner._ModelWrapper.model`: Edge Case Validator.
+    def test_edge_cases_model_wrapper_train(self):
+        """`modelwrapper.ModelWrapper.train`: Edge Case Validator.
 
-        Tests the behavior of `model` with edge cases.
+        Tests the behavior of `ModelWrapper.train` with edge cases.
 
         Raises:
             Exception: If at least one `Exception` raised is not of the expected
                 kind.
 
         """
-        with self.assertRaises(_InvalidModelParametersError):
-            # Empty parameters.
-            self.learner.Linear.model = dict(params=(_np.matrix([[]]),))
+        X = _random_matrix(self.data_shape)
+        """np.matrix: Random-valued feature set."""
+        Y = _random_matrix((self.data_shape[0], 1))
+        """np.matrix: Random-valued observation set."""
 
-        with self.assertRaises(_InvalidFeatureSetError):
-            # Empty feature set.
-            self.learner.Linear.model = dict(X=_np.matrix([[]]))
+        for name, ModelWrapper in self.learner:
+            with self.assertRaises(_InvalidFeatureSetError):
+                # Empty feature set.
+                ModelWrapper.train(_np.matrix([[]]), Y)
 
-    def test_invalid_args_model_wrapper_model(self):
-        """`Learner._ModelWrapper.model`: Argument Validator.
+            with self.assertRaises(_InvalidObservationSetError):
+                # Empty observation set.
+                ModelWrapper.train(X, _np.matrix([[]]))
 
-        Tests the behavior of `model` with invalid argument counts and values.
+            with self.assertRaises(ValueError):
+                # Incompatible `k` value.
+                ModelWrapper.train(X, Y, exact=True, k=self.data_shape[0])
+
+    def test_example_model_wrapper_train(self):
+        """`modelwrapper.ModelWrapper.train`: Example Validator.
+
+        Tests the behavior of `ModelWrapper.train` by feeding it real-life
+        datasets.
 
         Raises:
-            Exception: If at least one `Exception` raised is not of the expected
-                kind.
+            AssertionError: If `ModelWrapper.train` needs debugging.
 
         """
         for name, ModelWrapper in self.learner:
-            params = _compose(tuple, map)(_random_matrix, self.shapes[name])
-            """tuple of np.matrix: Random-valued parameters."""
+            for type, loader in _examples[name].iteritems():
+                if type == "classification":
+                    break
 
-            with self.assertRaises(AttributeError):
-                # Too many parameters.
-                ModelWrapper.model = dict(params=params), dict(params=params)
+                X, Y, desc, feature_names, target, kwargs = loader()[:-1]
+                """tuple: Example dataset."""
 
-            with self.assertRaises(AttributeError):
-                # No parameters set.
-                ModelWrapper.model = {}
+                train_X, train_Y, test_X, test_Y = _partition_data(X, Y, 0.6)
+                """(np.matrix, np.matrix, np.matrix, np.matrix): Training and
+                testing feature and observation sets."""
 
-            with self.assertRaises(AttributeError):
-                # Both parameters set.
-                ModelWrapper.model = dict(params=params,
-                                          X=_random_matrix(self.data_shape))
+                ModelWrapper.model = dict(X=train_X)
 
-            with self.assertRaises(_InvalidModelParametersError):
-                # `None` instead of parameters.
-                ModelWrapper.model = dict(params=None)
+                init_err = ModelWrapper.evaluate(test_X, test_Y)
+                """float: Testing error before training."""
 
-            with self.assertRaises(_InvalidModelParametersError):
-                # List instead of parameter tuple.
-                ModelWrapper.model = dict(params=list(params))
+                a_training_err = ModelWrapper.train(train_X, train_Y,
+                                                    exact=True)
+                """float: Analytical training error."""
+                a_err = ModelWrapper.evaluate(test_X, test_Y)
+                """float: Testing error after analytical training."""
 
-            with self.assertRaises(_InvalidModelParametersError):
-                ndarray_parms = dict(params=_compose(tuple,
-                                                     map)(_np.zeros,
-                                                          self.shapes[name]))
+                # v = self.learner.visualize(desc, (3, 5))
+                # v.plot_features(test_X, test_Y, None, ModelWrapper,
+                #                 feature_names, target)
+                # v.show()
+                # v.close()
 
-                # Tuple of ndarray instead of matrix tuple.
-                ModelWrapper.model = ndarray_parms
+                n_training_err = ModelWrapper.train(train_X, train_Y, **kwargs)
+                """float: Numerical training error."""
+                n_err = ModelWrapper.evaluate(test_X, test_Y)
+                """float: Testing error after numerical training."""
+
+
+                # Analytical training should provide a global minimum.
+                self.assertLess(a_err, init_err)
+                self.assertLess(a_err, n_err)
+                self.assertLess(a_training_err, n_training_err)
+
+                # Numerical training should provide a better guess than the
+                # initial one.
+                self.assertLess(n_err, init_err)
+
+    def test_invalid_args_model_wrapper_train(self):
+        """`modelwrapper.ModelWrapper.train`: Argument Validator.
+
+        Tests the behavior of `ModelWrapper.train` with invalid argument counts
+        and values.
+
+        Raises:
+            Exception: If at least one `Exception` raised is not of the expected
+                kind.
+
+        """
+        X = _random_matrix(self.data_shape)
+        """np.matrix: Random-valued feature set."""
+        Y = _random_matrix((self.data_shape[0], 1))
+        """np.matrix: Random-valued observation set."""
+
+        for name, ModelWrapper in self.learner:
+            with self.assertRaises(TypeError):
+                # No arguments.
+                ModelWrapper.train()
+
+            with self.assertRaises(TypeError):
+                # Too many arguments.
+                ModelWrapper.train(X, Y, X)
+
+            with self.assertRaises(TypeError):
+                # Invalid kwarg.
+                ModelWrapper.train(X, Y, key="value")
 
             with self.assertRaises(_InvalidFeatureSetError):
                 # `None` instead of feature set `X`.
-                ModelWrapper.model = dict(X=None)
+                ModelWrapper.train(None, Y)
 
             with self.assertRaises(_InvalidFeatureSetError):
-                # ndarray instead of matrix `X`.
-                ModelWrapper.model = dict(X=_np.zeros(self.data_shape))
+                # ndarray instead of feature set `X`.
+                ModelWrapper.train(_np.zeros(self.data_shape), Y)
 
-    def test_random_model_wrapper_model(self):
-        """`Learner._ModelWrapper.model`: Randomized Validator.
+            with self.assertRaises(_InvalidObservationSetError):
+                # `None` instead of observation set `Y`.
+                ModelWrapper.train(X, None)
 
-        Tests the behavior of `model` by feeding it randomly generated
-        arguments.
+            with self.assertRaises(_InvalidObservationSetError):
+                # ndarray instead of observation set `Y`.
+                ModelWrapper.train(X, _np.zeros((self.data_shape[0], 1)))
+
+            with self.assertRaises(TypeError):
+                # None instead of int `k`.
+                ModelWrapper.train(X, Y, k=None)
+
+            with self.assertRaises(TypeError):
+                # Float instead of int `k`.
+                ModelWrapper.train(X, Y, k=0.5)
+
+            with self.assertRaises(ValueError):
+                # Negative integer instead of positive integer `k`.
+                ModelWrapper.train(X, Y, k=-10)
+
+            with self.assertRaises(ValueError):
+                # Zero of positive integer `k`.
+                print ModelWrapper.train(X, Y, k=0)
+
+    def test_random_model_wrapper_train(self):
+        """`modelwrapper.ModelWrapper.train`: Randomized Validator.
+
+        Tests the behavior of `ModelWrapper.train` by feeding it randomly
+        generated arguments.
 
         Raises:
-            AssertionError: If `model` needs debugging.
+            AssertionError: If `ModelWrapper.train` needs debugging.
 
         """
-        shape_regex = _re.compile(r"^\([0-9]+, [0-9]+\)$")
-        """SRE_Pattern: Identifies stringified shapes."""
+        n = self.data_shape[0]
+        """int: Total number of data points."""
 
-        for i in range(0, self.n_tests):
-            X = _random_matrix(self.data_shape)
-            """np.matrix: Random-valued matrix."""
-
+        for i in range(self.n_tests):
             for name, ModelWrapper in self.learner:
-                # Model string should indicate unset parameters at this point.
-                self._validate_model_getter(ModelWrapper, name,
-                                            self._params_unset)
+                for percent in range(10, 100, 18):
+                    f = percent / 100.0
+                    """float: Training to testing ratio."""
 
-                params = _compose(tuple, map)(_random_matrix, self.shapes[name])
-                """tuple of np.matrix: Random-valued parameters."""
+                    min_k = min(10, _compose(int, _np.floor)(f / 2.0 * n))
+                    """int: Minimum number of data points per batch."""
+                    max_k = _compose(int, _np.floor)(f * n)
+                    """int: Minimum number of data points per batch."""
 
-                ModelWrapper.model = dict(params=params)
+                    for k in range(min_k, max_k,
+                                   _compose(int,
+                                            _np.floor)((max_k - min_k) / 5)):
+                        X = _random_matrix(self.data_shape)
+                        """np.matrix: Random-valued feature set."""
+                        Y = _random_matrix((n, 1))
+                        """np.matrix: Random-valued observation set."""
 
-                # Model string should indicate that all parameters are set at
-                # this point.
-                self._validate_model_getter(ModelWrapper, name,
-                                            self._params_set)
-
-                del ModelWrapper._model.params
-
-                # Model string should indicate unset parameters again.
-                self._validate_model_getter(ModelWrapper, name,
-                                            self._params_unset)
-
-                ModelWrapper.model = dict(X=X)
-
-                # Model string should indicate that all parameters are set once
-                # more.
-                self._validate_model_getter(ModelWrapper, name,
-                                            self._params_set)
-                del ModelWrapper._model.params
-
-    def _params_set(self, name, s):
-        """
-
-        Runs tests to check that the given parameter string matches
-        a stringified parameter shape.
-
-        Args:
-            s (str): Stringified parameter.
-
-        Raises:
-            AssertionError: If `s` does not indicate that the parameter has been
-                properly set.
-
-        """
-        self.assertIn(s, map(str, self.shapes[name]))
-
-    def _params_unset(self, name, s):
-        """
-
-        Runs tests to check that the given parameter string reflects that it is
-        not currently set.
-
-        Args:
-            s (str): Stringified parameter.
-
-        Raises:
-            AssertionError: If `s` indicates that the parameter has been
-                properly set.
-
-        """
-        self.assertEqual(s, "not set")
-
-    def _validate_model_getter(self, ModelWrapper, name, value_test):
-        """`_ModelWrapper.model`: Getter Validator.
-
-        Args:
-            ModelWrapper (_ModelWrapper): Instance getting validated.
-            name (str): Key for current `_ModelWrapper`.
-            value_test (callable): Runs tests that validate getter output.
-
-        Raises:
-            AssertionError: If the `model` getter needs debugging.
-
-        """
-        param_extractor = lambda s: _compose(tuple,
-                                             s.rstrip(",").split)("`: ")
-        """callable: Separates stringified key/parameters pairs."""
-
-        param_regex = _re.compile("^%sModel:" % name)
-        """SRE_Pattern: Identifies the current `_ModelWrapper`'s full
-        name."""
-        param_labels = map(param_extractor,
-                           filter(lambda s: len(s),
-                                  param_regex.sub("",
-                                                  ModelWrapper.model).split(" `")))
-        """list of (str, str): String representations of parameter names
-        and values."""
-
-        # Only registered parameters should be printed out.
-        self.assertEqual(len(ModelWrapper._model._param_names),
-                         len(param_labels))
-
-        for p_name, value in param_labels:
-            # Only registered parameters should be printed out.
-            self.assertIn("_%s" % p_name, ModelWrapper._model._param_names)
-
-            # All parameters should be uninitialized at this point.
-            value_test(name, value)
+                        train_X, train_Y, test_X, test_Y = _partition_data(X, Y,
+                                                                           f)
+                        """(np.matrix, np.matrix, np.matrix, np.matrix): Train-
+                        ing and testing feature and observation sets."""
 
 
-Test = _unittest.TestLoader().loadTestsFromTestCase(_Test)
-"""TestSuite: Linear model testing suite."""
+                        ModelWrapper.model = dict(X=train_X)
+
+                        init_err = ModelWrapper.evaluate(test_X, test_Y)
+                        """float: Loss before training."""
+
+                        ModelWrapper.train(train_X, train_Y, exact=True, k=k)
+
+                        a_err = ModelWrapper.evaluate(test_X, test_Y)
+                        """float: Loss after analytical training."""
+
+                        # Analytical error should be a float.
+                        self.assertIsInstance(a_err, float)
+
+                        if f >= 0.5:
+                            # Analytical training should provide a global
+                            # minimum.
+                            self.assertLess(a_err, init_err)
+
+Test = _TestLoader().loadTestsFromTestCase(_Test)

@@ -1,5 +1,8 @@
 """Loss Functions Testing Module.
 
+Attributes:
+    Test (TestSuite): Loss functions testing suite.
+
 """
 import numpy as _np
 import unittest as _unittest
@@ -19,8 +22,6 @@ class _Test(_ModuleTestCase):
         - `mse`
 
     Attributes:
-        cutoff_zero (float): The largest value treated as zero in all equality
-            tests.
         label (str): Identifier for super class to generate custome test
             docstrings according to the loss function module.
         max_mean (float): Max MSE to coerce for random tests.
@@ -35,12 +36,12 @@ class _Test(_ModuleTestCase):
         Sets up the necessary information to begin testing.
 
         """
-        self.cutoff_zero = 1e-2
         self.label = '`loss`'
         self.max_mean = 1e6
         self.n = 100
         self.n_tests = 20
         self.name = __name__
+        self.zero_cutoff = 1e-2
 
     def test_edge_cases_mse(self):
         """`loss.mse`: Edge Case Validator.
@@ -103,7 +104,7 @@ class _Test(_ModuleTestCase):
             AssertionError: If `mse` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             Y = _random_matrix((self.n, 1), max_val=self.max_mean)
             """float: Random-valued observations."""
             Y_hat = _random_matrix((self.n, 1), max_val=self.max_mean)
@@ -129,7 +130,6 @@ class _Test(_ModuleTestCase):
             result = mse(Y, Y_hat)
             """float: Test input."""
 
-            self.assertLessEqual(abs(result - err), self.cutoff_zero)
+            self.assertAlmostEqual(result, err)
 
 Test = _unittest.TestLoader().loadTestsFromTestCase(_Test)
-"""TestSuite: Loss function testing suite."""

@@ -1,5 +1,8 @@
 """Augmentors Testing Module.
 
+Attributes:
+    Test (TestSuite): Augmentators testing suite.
+
 """
 import numpy as _np
 import math as _math
@@ -18,8 +21,6 @@ class _Test(_ModuleTestCase):
         - `constant_augmentor`
 
     Attributes:
-        cutoff_zero (float): The largest value treated as zero in all equality
-            tests.
         data_shape ((int, int)): Dimensions for all auto-generated data sets.
         label (str): Identifier for super class to generate custome test
             docstrings according to the linear model module.
@@ -35,7 +36,6 @@ class _Test(_ModuleTestCase):
         Sets up the necessary information to begin testing.
 
         """
-        self.cutoff_zero = 1e-2
         self.data_shape = 100, 20
         self.label = '`augmentor`'
         self.n_tests = 20
@@ -100,7 +100,7 @@ class _Test(_ModuleTestCase):
             AssertionError: If `constant_augmentor` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = _random_matrix(self.data_shape)
             """np.matrix: Random-valued matrix."""
             n = X.shape[0]
@@ -110,7 +110,7 @@ class _Test(_ModuleTestCase):
             """np.matrix: Test input."""
 
             # Augmentation should also be a matrix.
-            self.assertEqual(type(X), _np.matrix)
+            self.assertIsInstance(X, _np.matrix)
 
             # Unit-valued vector should have been appended to the left of `X`.
             self.assertEqual(new_X.shape[1], X.shape[1] + 1)
@@ -123,9 +123,6 @@ class _Test(_ModuleTestCase):
 
             # The norm of the leftmost column vector of `new_X` should be
             # computable accordin to the following formula.
-            self.assertLessEqual(abs(_np.linalg.norm(new_X[:, 0]) -
-                                                     _math.sqrt(n)),
-                                 self.cutoff_zero)
+            self.assertAlmostEqual(_np.linalg.norm(new_X[:, 0]), _math.sqrt(n))
 
 Test = _unittest.TestLoader().loadTestsFromTestCase(_Test)
-"""TestSuite: General utilities testing suite."""

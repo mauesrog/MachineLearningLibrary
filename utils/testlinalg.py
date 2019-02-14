@@ -1,5 +1,8 @@
 """Linear Algebra Utilities Testing Module.
 
+Attributes:
+    Test (TestSuite): Linear algebra utilities testing suite.
+
 """
 import math as _math
 import numpy as _np
@@ -8,9 +11,9 @@ import unittest as _unittest
 from common.test_cases.module_test_case import ModuleTestCase as _ModuleTestCase
 from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSetsError, \
                               InvalidFeatureSetError as _InvalidFeatureSetError
-from general import compose
+from general import appendargs, compose
 from linalg import append_bottom, append_left, append_right, append_top, \
-                   diagonal, random_matrix, _append_helper
+                   diagonal, factors, random_matrix, _append_helper
 
 
 class _Test(_ModuleTestCase):
@@ -20,8 +23,6 @@ class _Test(_ModuleTestCase):
         - `diagonal`
 
     Attributes:
-        cutoff_zero (float): The largest value treated as zero in all equality
-            tests.
         data_shape ((int, int)): Dimensions for all auto-generated data sets.
         label (str): Identifier for super class to generate custome test
             docstrings according to the general model utilities module. See base
@@ -38,7 +39,6 @@ class _Test(_ModuleTestCase):
         Sets up the necessary information to begin testing.
 
         """
-        self.cutoff_zero = 1e-6
         self.label = '`linalg`'
         self.max_val = 100
         self.data_shape = 100, 20
@@ -128,6 +128,19 @@ class _Test(_ModuleTestCase):
 
         """
         pass
+
+    def test_edge_cases_factors(self):
+        """`linalg.factors`: Edge Case Validator.
+
+        Tests the behavior of `factors` with edge cases.
+
+        Raises:
+            Exception: If at least one `Exception` raised is not of the expected
+                kind.
+
+        """
+        with self.assertRaises(ValueError):
+            factors(0)
 
     def test_edge_cases_random_matrix(self):
         """`linalg.random_matrix`: Edge Case Validator.
@@ -225,11 +238,6 @@ class _Test(_ModuleTestCase):
                                          self.data_shape[0])),
                           random_matrix((1, self.data_shape[1])))
 
-        with self.assertRaises(_IncompatibleDataSetsError):
-            # Matrix instead of vector `v`.
-            append_bottom(random_matrix(self.data_shape),
-                          random_matrix(self.data_shape))
-
     def test_invalid_args_append_left(self):
         """`linalg.append_left`: Argument Validator.
 
@@ -295,11 +303,6 @@ class _Test(_ModuleTestCase):
             # Incompatible matrices `X` and `v`.
             append_left(random_matrix((self.data_shape[1], self.data_shape[0])),
                         random_matrix((self.data_shape[0], 1)))
-
-        with self.assertRaises(_IncompatibleDataSetsError):
-            # Matrix instead of vector `v`.
-            append_left(random_matrix(self.data_shape),
-                        random_matrix(self.data_shape))
 
     def test_invalid_args_append_right(self):
         """`linalg.append_right`: Argument Validator.
@@ -368,11 +371,6 @@ class _Test(_ModuleTestCase):
                                         self.data_shape[0])),
                          random_matrix((self.data_shape[0], 1)))
 
-        with self.assertRaises(_IncompatibleDataSetsError):
-            # Matrix instead of vector `v`.
-            append_right(random_matrix(self.data_shape),
-                         random_matrix(self.data_shape))
-
     def test_invalid_args_append_top(self):
         """`linalg.append_top`: Argument Validator.
 
@@ -439,11 +437,6 @@ class _Test(_ModuleTestCase):
             append_top(random_matrix((self.data_shape[1], self.data_shape[0])),
                        random_matrix((1, self.data_shape[1])))
 
-        with self.assertRaises(_IncompatibleDataSetsError):
-            # Matrix instead of vector `v`.
-            append_top(random_matrix(self.data_shape),
-                       random_matrix(self.data_shape))
-
     def test_invalid_args_diagonal(self):
         """`linalg.diagonal`: Argument Validator.
 
@@ -505,6 +498,40 @@ class _Test(_ModuleTestCase):
         with self.assertRaises(TypeError):
             # Tuple instead of optional float `val`.
             diagonal(self.data_shape[0], val=(0.2123,))
+
+    def test_invalid_args_factors(self):
+        """`linalg.factors`: Argument Validator.
+
+        Tests the behavior of `factors` with invalid argument counts and values.
+
+        Raises:
+            Exception: If at least one `Exception` raised is not of the expected
+                kind.
+
+        """
+        with self.assertRaises(TypeError):
+            # No arguments.
+            factors()
+
+        with self.assertRaises(TypeError):
+            # Too many arguments.
+            factors(1, 2)
+
+        with self.assertRaises(TypeError):
+            # With kwarg.
+            factors(1, key="value")
+
+        with self.assertRaises(TypeError):
+            # `None` instead of `n`.
+            factors(None)
+
+        with self.assertRaises(TypeError):
+            # float instead of `n`.
+            factors(5.0)
+
+        with self.assertRaises(ValueError):
+            # Negative integer instead of `n`.
+            factors(-8)
 
     def test_invalid_args_random_matrix(self):
         """`linalg.random_matrix`: Argument Validator.
@@ -614,7 +641,7 @@ class _Test(_ModuleTestCase):
             AssertionError: If `diagonal` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             n = _np.random.randint(1, self.max_val)
             """int: Random-valued diagonal vector length."""
             val = _np.random.uniform(0.0, float(self.max_val))
@@ -624,13 +651,33 @@ class _Test(_ModuleTestCase):
             """np.matrix: Test input."""
 
             # Result should be a matrix.
-            self.assertEqual(type(result), _np.matrix)
+            self.assertIsInstance(result, _np.matrix)
 
             # The norm of the diagonal should be computable accordin to the
             # following formula.
-            self.assertLessEqual(abs(_np.linalg.norm(result.diagonal()) -
-                                                     _math.sqrt(n) * val),
-                                 self.cutoff_zero)
+            self.assertAlmostEqual(_np.linalg.norm(result.diagonal()),
+                                   _math.sqrt(n) * val)
+
+    def test_random_factors(self):
+        """`linalg.factors`: Randomized Validator.
+
+        Tests the behavior of `factors` by feeding it randomly generated arguments.
+
+        Raises:
+            AssertionError: If `factors` needs debugging.
+
+        """
+        for i in range(self.n_tests):
+            n = _np.random.randint(1, self.max_val)
+            """int: Random input."""
+
+            f = factors(n)
+            """list of int: Test input."""
+
+            # Factors should be a list of integers.
+            self.assertIsInstance(f, list)
+            map(appendargs(self.assertIsInstance, int), f)
+
 
     def test_random_append_left(self):
         """`linalg.append_left`: Randomized Validator.
@@ -642,7 +689,7 @@ class _Test(_ModuleTestCase):
             AssertionError: If `append_left` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
             v = random_matrix((self.data_shape[0], 1))
@@ -652,7 +699,7 @@ class _Test(_ModuleTestCase):
             """np.matrix: Test input."""
 
             # Result should be a matrix.
-            self.assertEqual(type(result), _np.matrix)
+            self.assertIsInstance(result, _np.matrix)
 
             to_norm = lambda (A, axis): _np.linalg.norm(A, axis=axis)
             """callable: Takes in a matrix returns the norm along the specified
@@ -675,13 +722,12 @@ class _Test(_ModuleTestCase):
             of the augmented matrix."""
 
             # The row norms of input should match those of the augmented matrix.
-            self.assertLessEqual(delta, self.cutoff_zero)
+            self.assertLessEqual(delta, self.zero_cutoff)
 
             # The vector norm of `v` should match that of the leftmost row
             # vector in the augmented matrix.
-            self.assertLessEqual(abs(_np.linalg.norm(v) -
-                                     _np.linalg.norm(result[:, 0])),
-                                 self.cutoff_zero)
+            self.assertAlmostEqual(_np.linalg.norm(v),
+                                   _np.linalg.norm(result[:, 0]))
 
     def test_random_append_right(self):
         """`linalg.append_right`: Randomized Validator.
@@ -693,7 +739,7 @@ class _Test(_ModuleTestCase):
             AssertionError: If `append_right` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
             v = random_matrix((self.data_shape[0], 1))
@@ -703,7 +749,7 @@ class _Test(_ModuleTestCase):
             """np.matrix: Test input."""
 
             # Result should be a matrix.
-            self.assertEqual(type(result), _np.matrix)
+            self.assertIsInstance(result, _np.matrix)
 
             to_norm = lambda (A, axis): _np.linalg.norm(A, axis=axis)
             """callable: Takes in a matrix returns the norm along the specified
@@ -726,13 +772,12 @@ class _Test(_ModuleTestCase):
             of the augmented matrix."""
 
             # The row norms of input should match those of the augmented matrix.
-            self.assertLessEqual(delta, self.cutoff_zero)
+            self.assertLessEqual(delta, self.zero_cutoff)
 
             # The vector norm of `v` should match that of the rightmost row
             # vector in the augmented matrix.
-            self.assertLessEqual(abs(_np.linalg.norm(v) -
-                                     _np.linalg.norm(result[:, -1])),
-                                 self.cutoff_zero)
+            self.assertAlmostEqual(_np.linalg.norm(v),
+                                   _np.linalg.norm(result[:, -1]))
 
     def test_random_append_top(self):
         """`linalg.append_top`: Randomized Validator.
@@ -744,7 +789,7 @@ class _Test(_ModuleTestCase):
             AssertionError: If `append_top` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
             v = random_matrix((1, self.data_shape[1]))
@@ -754,7 +799,7 @@ class _Test(_ModuleTestCase):
             """np.matrix: Test input."""
 
             # Result should be a matrix.
-            self.assertEqual(type(result), _np.matrix)
+            self.assertIsInstance(result, _np.matrix)
 
             to_norm = lambda (A, axis): _np.linalg.norm(A, axis=axis)
             """callable: Takes in a matrix returns the norm along the specified
@@ -777,13 +822,12 @@ class _Test(_ModuleTestCase):
             of the augmented matrix."""
 
             # The row norms of input should match those of the augmented matrix.
-            self.assertLessEqual(delta, self.cutoff_zero)
+            self.assertLessEqual(delta, self.zero_cutoff)
 
             # The vector norm of `v` should match that of the topmost row
             # vector in the augmented matrix.
-            self.assertLessEqual(abs(_np.linalg.norm(v) -
-                                     _np.linalg.norm(result[0, :])),
-                                 self.cutoff_zero)
+            self.assertAlmostEqual(_np.linalg.norm(v),
+                                   _np.linalg.norm(result[0, :]))
 
     def test_random_append_bottom(self):
         """`linalg.append_bottom`: Randomized Validator.
@@ -795,7 +839,7 @@ class _Test(_ModuleTestCase):
             AssertionError: If `append_bottom` needs debugging.
 
         """
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = random_matrix(self.data_shape)
             """np.matrix: Random-valued feature set."""
             v = random_matrix((1, self.data_shape[1]))
@@ -805,7 +849,7 @@ class _Test(_ModuleTestCase):
             """np.matrix: Test input."""
 
             # Result should be a matrix.
-            self.assertEqual(type(result), _np.matrix)
+            self.assertIsInstance(result, _np.matrix)
 
             to_norm = lambda (A, axis): _np.linalg.norm(A, axis=axis)
             """callable: Takes in a matrix returns the norm along the specified
@@ -828,13 +872,12 @@ class _Test(_ModuleTestCase):
             of the augmented matrix."""
 
             # The row norms of input should match those of the augmented matrix.
-            self.assertLessEqual(delta, self.cutoff_zero)
+            self.assertLessEqual(delta, self.zero_cutoff)
 
             # The vector norm of `v` should match that of the bottommost row
             # vector in the augmented matrix.
-            self.assertLessEqual(abs(_np.linalg.norm(v) -
-                                     _np.linalg.norm(result[-1, :])),
-                                 self.cutoff_zero)
+            self.assertAlmostEqual(_np.linalg.norm(v),
+                                   _np.linalg.norm(result[-1, :]))
 
     def test_random_random_matrix(self):
         """`linalg.random_matrix`: Randomized Validator.
@@ -850,7 +893,7 @@ class _Test(_ModuleTestCase):
         """float: Holds the norm of the random matrix of the previous
         iteration."""
 
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             min_val = _np.random.uniform(0.0, float(self.max_val))
             """float: Lower bound for random matrix."""
             max_val = _np.random.uniform(min_val + 1.0, float(self.max_val))
@@ -860,7 +903,7 @@ class _Test(_ModuleTestCase):
             """np.matrix: Test input."""
 
             # Result should be a matrix of the specified dimensions.
-            self.assertEqual(type(result), _np.matrix)
+            self.assertIsInstance(result, _np.matrix)
             self.assertEqual(result.shape, self.data_shape)
 
 
@@ -868,7 +911,7 @@ class _Test(_ModuleTestCase):
             """float: Holds the norm of the newly generated random matrix."""
 
             # Current norm has virtually no chance of being equal to zero.
-            self.assertGreater(curr, self.cutoff_zero)
+            self.assertGreater(curr, self.zero_cutoff)
 
             # The norm of this iteration's result has virutally no chance of
             # being equal to that of the previous one.
@@ -876,4 +919,3 @@ class _Test(_ModuleTestCase):
             prev = curr
 
 Test = _unittest.TestLoader().loadTestsFromTestCase(_Test)
-"""TestSuite: Linear algebra utilities testing suite."""

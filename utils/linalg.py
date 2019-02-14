@@ -109,6 +109,39 @@ def diagonal(n, val=1.0):
     # specified constant does the trick.
     return _np.matrix(val * _np.identity(n))
 
+def factors(n):
+    """Factor Finder.
+
+    Computes all the factors of the given number.
+
+    See:
+        https://stackoverflow.com/questions/6800193/what-is-the-most-efficient-way-of-finding-all-the-factors-of-a-number-in-python
+
+    Args:
+        n (int): Number whose factors want to be found.
+
+    Returns:
+        list of int: `n`'s factors (if any).
+
+    Raises:
+        TypeError: If `n` is not an integer.
+
+    """
+    if type(n) != int:
+        raise TypeError("Expected 'int', saw '%s' instead." % type(n).__name__)
+
+    candidates = range(1, int(n ** 0.5) + 1)
+    """list of int: All integers within the upper bound given by the square root
+    of `n`."""
+    factors = [[i, n // i] for i in candidates if n % i == 0]
+    """list of int: `n`'s factors with possible duplicates for perfect
+    squares."""
+
+    try:
+        return compose(list, set, reduce)(list.__add__, factors)
+    except TypeError:
+        raise ValueError("Factors of input '%s' are not computable." % str(n))
+
 def random_matrix(size, min_val=DEFAULT_MIN_RANDOM_VALUE,
                   max_val=DEFAULT_MAX_RANDOM_VALUE):
     """Random Matrix Generator.
@@ -162,11 +195,12 @@ def random_matrix(size, min_val=DEFAULT_MIN_RANDOM_VALUE,
 def _append_helper(X, v, position):
     """Matrix Concatenator.
 
-    Appends the given row/column vector at the specified position of a matrix.
+    Appends the given row/column vector(s) at the specified position of a
+    matrix.
 
     Args:
         X (np.matrix): Feature set to be augmented.
-        v (np.matrix): Vector (as a matrix).
+        v (np.matrix): Vector(s) (as a matrix).
         position (str): 'bottom', 'left', 'right', or 'top'.
 
     Returns:
@@ -174,7 +208,7 @@ def _append_helper(X, v, position):
 
     Raises:
         IncompatibleDataSetsError: If the feature set's and vector's dimensions
-            do not match or if `v` is not unit-dimensioned.
+            do not match.
         InvalidFeatureSetError: If the given feature set or vector are invalid.
 
     """
@@ -197,7 +231,7 @@ def _append_helper(X, v, position):
     """int: Index into both the matrix's and the vector's `shape` attributes.
     Determines which dimensions should be aligned."""
 
-    if X.shape[index] != v.shape[index] or v.shape[(index + 1) % 2] != 1:
+    if X.shape[index] != v.shape[index]:
         raise _IncompatibleDataSetsError(X, v, "concatenation")
 
     return compose(_np.matrix, _np.concatenate)(*args)
