@@ -1,16 +1,19 @@
 """Linear Model Testing Module.
 
+Attributes:
+    Test (TestSuite): Linear model testing suite.
+
 """
 import numpy as _np
 import math as _math
 import unittest as _unittest
 
-from common.test_cases.model_test_case import ModelTestCase as _ModelTest
-from linear import LinearModel as _LinearModel
+from common.test_cases.model_test_case import ModelTestCase as _ModelTestCase
+from linear import LinearModel
 from utils.linalg import random_matrix as  _random_matrix
 
 
-class _Test(_ModelTest):
+class _Test(_ModelTestCase):
     """Linear Model Unit Tester.
 
     Runs tests for all properties and methods of `Model`, plus those particular
@@ -18,8 +21,6 @@ class _Test(_ModelTest):
         - `augment`
 
     Attributes:
-        cutoff_zero (float): The largest value treated as zero in all equality
-            tests.
         data_shape ((int, int)): Dimensions for all auto-generated data sets.
         label (str): Identifier for super class to generate custome test
             docstrings according to the linear model module.
@@ -38,7 +39,7 @@ class _Test(_ModelTest):
         self.cutoff_zero = 1e-2
         self.data_shape = 100, 20
         self.label = '`linear.LinearModel`'
-        self.model = _LinearModel(0.5)
+        self.model = LinearModel(0.5)
         self.n_tests = 50
         self.name = __name__
         self.shapes = tuple([(20, 1)])
@@ -59,7 +60,7 @@ class _Test(_ModelTest):
         # Run `Model`-wide `augment` unit tests.
         super(_Test, self).test_random_model_augment()
 
-        for i in range(0, self.n_tests):
+        for i in range(self.n_tests):
             X = _random_matrix(self.data_shape)
             """np.matrix: Random-valued matrix."""
             n = X.shape[0]
@@ -69,7 +70,7 @@ class _Test(_ModelTest):
             """np.matrix: Test input."""
 
             # Augmentation should also be a matrix.
-            self.assertEqual(type(X), _np.matrix)
+            self.assertIsInstance(X, _np.matrix)
 
             # Unit-valued vector should have been appended to the left of `X`.
             self.assertEqual(new_X.shape[1], X.shape[1] + 1)
@@ -82,9 +83,6 @@ class _Test(_ModelTest):
 
             # The norm of the leftmost column vector of `new_X` should be
             # computable accordin to the following formula.
-            self.assertLessEqual(abs(_np.linalg.norm(new_X[:, 0]) -
-                                                     _math.sqrt(n)),
-                                 self.cutoff_zero)
+            self.assertAlmostEqual(_np.linalg.norm(new_X[:, 0]), _math.sqrt(n))
 
 Test = _unittest.TestLoader().loadTestsFromTestCase(_Test)
-"""TestSuite: Linear model testing suite."""

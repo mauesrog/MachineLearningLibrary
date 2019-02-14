@@ -68,7 +68,11 @@ class LinearModel(Model):
             delta_Y = Y - Y_hat
             """np.matrix: Difference between observations and predictions."""
 
-            return (-2.0 * (X.T.dot(delta_Y) - self._regularization * self._a),)
+            grad = (-2.0 / n) * (X.T.dot(delta_Y) -
+                                 n * self._regularization * self._a)
+            """np.matrix: Gradient of linear weights."""
+
+            return (grad,)
 
         return super(LinearModel,
                      self)._update_model(action, X=X, Y=Y, params=params)
@@ -124,10 +128,12 @@ class LinearModel(Model):
                     observations.
 
             """
-            reg = diagonal(X.shape[1], self._regularization)
+            n, d = X.shape
+
+            reg = diagonal(d, self._regularization)
             """np.matrix: Diagonal L2 regularization matrix"""
 
-            self.params = (np.matrix(X.T.dot(X) + reg).I.dot(X.T).dot(Y),)
+            self.params = (np.matrix(X.T.dot(X) + reg * n).I.dot(X.T).dot(Y),)
 
             return self.evaluate(X, Y)[0]
 

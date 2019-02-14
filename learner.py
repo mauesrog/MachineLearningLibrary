@@ -3,19 +3,21 @@
 Abstracts all training and testing from the actual mathematical models.
 
 Attributes:
-    models (:obj:`Model`): All available learning models.
+    active_models (:obj:`Model`): All available learning models.
 
     See `config.models`.
 
 """
-from matplotlib import pyplot as plot
 import numpy as np
 from copy import deepcopy
 
 from config import learner_defaults
-from utils.stats import batches
+from utils.general import compose
+from utils.stats import batches, shuffle_batches
+from utils.linalg import append_bottom
+from utils.visualization import Visualization
 from models.linear import LinearModel
-
+from models.modelwrapper import ModelWrapper
 
 DEFAULT_DECAY_RATE = learner_defaults["decay_rate"]
 DEFAULT_LEARNING_RATE = learner_defaults["learning_rate"]
@@ -23,81 +25,33 @@ DEFAULT_MAX_EPOCHES = learner_defaults["max_epoches"]
 DEFAULT_SGD_K = learner_defaults["sgd_k"]
 MIN_DELTA_EPOCH = learner_defaults["min_delta_epoch"]
 
-models = dict(Linear=LinearModel)
+active_models = dict(Linear=LinearModel)
 
-
-class _ModelWrapper(object):
-    """Model Wrapper.
-
-    Encapsulates all `Model` instances in `Learner` to provide a more simplified
-    and protected learning API.
-
-    Attributes:
-        _learner (Learner): Handle to learner responsible for instantiating
-            `self`.
-
-    """
-    def __init__(self, learner, Model):
-        """Model Wrapper Constructor.
-
-        """
-        self._learner = learner
-        self._model = Model()
-
-    @property
-    def model(self):
-        """str: String representation of current model state."""
-        return str(self._model)
-
-    @model.setter
-    def model(self, args):
-        """Note: Only one flag can be active.
-
-        Args:
-            params (tuple of np.matrix, optional): Explicit model parameters.
-            X (np.matrix): Feature set from which to infer the model parameters.
-                Shape: n x d.
-
-        Raises:
-            AttributeError: If the flags `params` and `X` are both set or if
-                neither is.
-
-        """
-        if ("params" in args and "X" in args) or \
-           not ("params" in args or "X" in args):
-            raise AttributeError("Provide either `parmas` or `X`, not both or "
-                                 "neither.")
-
-        if "params" in args:
-            self._model.params = args["params"]
-
-        if "X" in args:
-            self._model.init_params(args["X"])
-
-    def predict(self, X):
-        """Model Predictor Wrapper.
-
-        Args:
-            X (np.matrix): Feature set. Shape: n x d.
-
-        Returns:
-            See `Model.predict`.
-
-        """
-        return self._model.predict(X)
-
-    def train(self):
-        """Model Parameter Trainer.
-
-        """
-        pass
 
 class _LearnerMetaClass(type):
-    def __new__(metaname, classname, baseclasses, attrs):
-        self = type.__new__(metaname, classname, baseclasses, attrs)
+    """Learner MetaClass.
 
-        for name, model in models.items():
-            setattr(self, name, _ModelWrapper(self, model))
+    Performs abstractions to `Learner` in order to provide a cleaner API.
+
+    """
+    def __new__(metaname, classname, baseclasses, attrs):
+        """Learner Instantiator.
+
+        Adds ModelWrapper attributes to the learner for each currently
+        implemented model.
+
+        Args:
+            See `type.__new__`.
+
+        Returns:
+            Learner: Augmented class instance.
+
+        """
+        self = type.__new__(metaname, classname, baseclasses, attrs)
+        """Learner: Augmented class instance."""
+
+        for name, model in active_models.items():
+            setattr(self, name, ModelWrapper(model))
 
         return self
 
@@ -107,6 +61,10 @@ class Learner(object):
     Defines methods to train, evaluate, and test mathematical models that
     implement the abstract class `Model`.
 
+    Returns:
+        (tuple of np.matrix, float): Best parameters found according to
+            best training error, which gets returned as well.
+
     """
     __metaclass__ = _LearnerMetaClass
 
@@ -114,10 +72,14 @@ class Learner(object):
         """Learner Constructor.
 
         """
-        pass
+        # Add a Reference to `self` for all `ModelWrapper` instances to train.
+        for name, model in active_models.items():
+            getattr(self, name)._update_learner(self)
 
     def __iter__(self):
-        """Learner Iterator.
+        """Learner Model Iterator.
+
+        Returns an iterator of `ModelWrapper` instances.
 
         Yields:
             (str, _ModelWrapper): The next model key and wrapper.
@@ -127,90 +89,30 @@ class Learner(object):
         """callable: Maps model keys to tuples of that include a model
         wrapper."""
 
-        for model in map(model_key_to_tuple, models.keys()):
+        for model in map(model_key_to_tuple, active_models.keys()):
             yield model
 
-    def plot(self, title, **kwargs):
-        """Model Plotter.
+    @staticmethod
+    def visualize(*args, **kwargs):
+        """Visualization Wrapper.
 
-        Plots the given vectors and labels them accordingly.
-
-        Example:
-            The following would plot the observations and predictions of only
-            two data points:
-
-            >>> Learner.plot(observations=[0.1, 0.2], predictions=[0.11, 0.3])
+        Returns a `Visualization` instance with the given number of subplots.
 
         Args:
-            title (str): Plot display title.
-            **kwargs: Dictionary where keys represent y-axis labels and values
-                represent y-axis values e.g. .
-
-        Raises:
-            ValueError: If data vectors disagree in length.
-
-        """
-        X_axis = None
-        """float: Values for the horizontal axis."""
-
-        for label, vals in kwargs.iteritems():
-            if X_axis is None:
-                X_axis = [float(i) for i in range(0, len(vals))]
-            elif len(X_axis) != len(vals):
-                raise ValueError('All data points must be of equal length.')
-
-            plot.plot(X_axis, np.asarray(vals), label=label.capitalize())
-
-        if X_axis:
-            plot.title(title)
-            plot.legend()
-            plot.show()
-
-    def train(self, raw_X, Y, type, k=None, plot=False,
-              regularization=0.0, **kwargs):
-        """Model Trainer.
-
-        Args:
-            X (np.matrix): Training feature set. Shape: n x d.
-            Y (np.matrix): Training observation set. Shape: n x 1.
-            type (str): Model name. Must match an existing implementation of
-                `Model`.
-            exact (bool, optional): `True` means to use the global minimum of
-                the loss function, while `False` means to use stochastic
-                methods. Defaults to `False`.
-            plot (bool, optional): Whether to plot training predictions against
-                training observations. Defaults to `False`.
-            **kwargs: Additional arguments needed by the model and/or the
-                training method.
+            subplots (int): Number of subplots.
 
         Returns:
-            (tuple of np.matrix, float): Best parameters found according to
-                best training error, which gets returned as well.
-
-        Raises:
-            ValueError: If no model exists with name `type`.
+            Visualization: Dynamic plotter handle.
 
         """
-        if type not in models:
-            raise ValueError("Unkown model type: '%s'." % type)
+        return Visualization(*args, **kwargs)
 
-        Model = self._get_model(type)
-        model = Model(regularization)
-
-        del model.params
-
-        X = model.augment(raw_X)
-        training_err = self._cross_validate(X, Y, model, plot=plot, k=k,
-                                            **kwargs)
-
-        return lambda A: model.predict(model.augment(A)), training_err
-
-    def _cross_validate(self, X, Y, model, k=DEFAULT_SGD_K, plot=False, exact=False,
-                        **kwargs):
+    def _cross_validate(self, X, Y, model, k=DEFAULT_SGD_K, **kwargs):
         """K-Fold Cross Validation.
 
-        Trains the given model using stochastic gradient descent (SGD) via `k`
-        buckets.
+        Creates as many buckets with `k` elements as possible from the given
+        datasets and trains the model with all possible bucket permutations i.e.
+        reserves a single bucket for testing and the rest for training.
 
         Args:
             X (np.matrix): Training feature set. Shape: n x d.
@@ -218,54 +120,51 @@ class Learner(object):
             model (Model): Mathematical model to train.
             k (int, optional): Number of data points per bucket. Defaults to
                 `DEFAULT_SGD_K`.
-            plot (bool, optional): Whether to plot the training observations and
-                predictions of all `k` buckets. Defaults to `False`.
-            **kwargs: Additional arguments needed by the model for gradient
-                computation.
+            exact (bool, optional): `True` if training should be done
+                analytically, or `False` if it should be done stochastically.
+                Defaults to `False.`
 
         Returns:
-            float: Training error (i.e. the average error across all k buckets).
+            float: Training error (i.e. average testing error across all bucket
+                permutations).
 
         """
         buckets = batches(X, Y, k)
+        """list of np.matrix: Dataset batches with at least `k` data point
+        each."""
         err = []
-        min_err = float("inf")
+        """list of float: Testing errors of all permutations."""
         optimal_params = None
-        params = None
+        """tuple of np.matrix: Parameters with the smallest testing error."""
+        min_err = float("inf")
+        """float: Testing error of best parameters encountered."""
 
-        for i in range(0, len(buckets)):
-            test = buckets[i]
-            train = None
+        splitter = lambda dataset: (dataset[:, :-1], dataset[:, -1])
+        """callable: Separates a dataset into feature and observation sets."""
 
-            for j in range(0, len(buckets)):
-                if i != j:
-                    if train is None:
-                        train = buckets[j]
-                    else:
-                        train = np.matrix(np.concatenate((train, buckets[j])))
+        for i in range(len(buckets)):
+            train = deepcopy(buckets)
+            """list of np.matrix: Training buckets."""
+            test_X, test_Y = compose(splitter, train.pop)(i)
+            """(np.matrix, np.matrix): Testing feature and observation sets."""
 
-            train_X = np.matrix(train[:, :-1])
-            train_Y = np.matrix(train[:, -1])
-
-            test_X = np.matrix(test[:, :-1])
-            test_Y = np.matrix(test[:, -1])
-
-            params = self._train_helper(model, train_X, train_Y, params=params, exact=exact, **kwargs)
-            training_err, Y_hat = model.evaluate(test_X, test_Y, params=params, regularize=False)
-
-            if plot:
-                self.plot("Training results bucket %d. Training error: %f" % (i, training_err), observations=test_Y,
-                          predictions=Y_hat)
+            params = self._train_helper(model, train, **kwargs)
+            """tuple of np.matrix: Trained model parameters."""
+            training_err = model.evaluate(test_X, test_Y, params=params,
+                                          regularize=False)[0]
+            """float: Loss after training according to reserved testing
+            bucket."""
 
             err.append(training_err)
 
+            # Set current trained parameters as optimal if `training_err` is
+            # smaller than all other training errors encountered before.
             if training_err < min_err:
                 min_err = training_err
                 optimal_params = params
 
+        # Only update model parameters if a good match is found.
         if optimal_params is not None:
-            model.train(X, Y, exact=True)
-
             model.params = optimal_params
 
         return np.mean(err)
@@ -291,12 +190,6 @@ class Learner(object):
         """float: Ratio at which `learning_rate` will decline."""
 
         return learning_rate * decay_ratio ** -1.0
-
-    def _get_model(self, type):
-        if type not in models:
-            raise ValueError("Unkown model type: '%s'." % type)
-
-        return models[type]
 
     def _is_epoch_terminal(self, epoch, max_epoches, err):
         """SGD Terminality Check.
@@ -332,7 +225,7 @@ class Learner(object):
 
         return  delta_epoch < MIN_DELTA_EPOCH or err[-1] > err[-2]
 
-    def _sgd(self, model, X, Y, learning_rate=DEFAULT_LEARNING_RATE,
+    def _sgd(self, model, datasets, learning_rate=DEFAULT_LEARNING_RATE,
              decay_rate=DEFAULT_DECAY_RATE, max_epoches=DEFAULT_MAX_EPOCHES):
         """Stochastic Gradient Descent.
 
@@ -363,30 +256,62 @@ class Learner(object):
         params = model.params
         """tuple of np.matrix: Model parameters in current epoch."""
 
-        while not self._is_epoch_terminal(err):
-            grads = model.gradient(X, Y, params=params)
-            """tuple of np.matrix: Gradients of current model parameters."""
+        while not self._is_epoch_terminal(epoch, max_epoches, err):
+            curr_err = 0.0
+            """float: Training error averaged across all buckets."""
 
-            params, curr_err = self._update_rule(params, grads, lr)
+            for train_X, train_Y in datasets:
+                grads = model.gradient(train_X, train_Y, params=params)
+                """tuple of np.matrix: Gradients of current model parameters."""
+
+                params = self._update_rule(params, grads, lr)
+
+                curr_err += model.evaluate(train_X, train_Y, params=params)[0]
+
+            curr_err /= len(datasets)
+
             lr = self._decay_rule(epoch, lr, decay_rate)
 
             err.append(curr_err)
             epoch += 1
 
-
-        self.plot("Descent: %f" % err[-1], loss=err)
-
         return params
 
-    def _train_helper(self, model, train_X, train_Y, exact=False, **kwargs):
-        err = model.train(train_X, train_Y, exact=exact)
+    def _train_helper(self, model, train_buckets, exact=False, **kwargs):
+        """Model Trainer Helper.
+
+        Trains model parameters depending either analytically or numerically.
+
+        Args:
+            model (Model): Model to be trained.
+            train_buckets (list of np.matrix): Stochastic and randomized
+                representation of dataset.
+            exact (bool, optional): `True` if training should be done
+                analytically, `False` otherwise. Defaults to `False`.
+            **kwargs: Options that define SGD's behavior.
+
+        Returns:
+            tuple of np.matrix: Trained model parameters.
+
+        """
+        concatenator = lambda A, B: append_bottom(A, B)
+        """callable: Appends matrix `B` to the bottom of matrix `A`."""
+        splitter = lambda dataset: (dataset[:, :-1], dataset[:, -1])
+        """callable: Separates a dataset into feature and observation sets."""
+        datasets = shuffle_batches(train_buckets)
+        """list of np.matrix: Re-ordered batches."""
+
+        model.init_params(train_buckets[0][:, :-1])
 
         if exact:
-            params = model.params
-        else:
-            params = self._sgd(model, train_X, train_Y, **kwargs)
+            train_X, train_Y = compose(splitter, reduce)(concatenator, datasets)
+            """(np.matrix, np.matrix): Training feature and observation sets."""
 
-        return params
+            model.train(train_X, train_Y)
+        else:
+            model.params = self._sgd(model, map(splitter, datasets), **kwargs)
+
+        return model.params
 
     def _update_rule(self, params, grads, learning_rate):
         """SGD Update Rule.
@@ -407,7 +332,7 @@ class Learner(object):
         new_params = deepcopy(params)
         """tuple of np.matrix: Parameter update."""
 
-        for i in range(0, len(params)):
-            new_params[i] -= learning_rate * grads[i]
+        for p, g in zip(new_params, grads):
+            p -= learning_rate * g
 
-        return new_params, model.evaluate(X, Y, params=new_params)[0]
+        return new_params

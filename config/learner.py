@@ -8,13 +8,15 @@ Attributes:
 
 """
 learner_defaults = {
-    "decay_rate": 0.5,  #: Default positive rate at which SGD's update rule
+    "decay_rate": 5e-2,  #: Default positive rate at which SGD's update rule
                         #: should descend.
-    "learning_rate": 1e-3,  #: Default positive rate at which SGD's learning
+    "learning_rate": 1e-4,  #: Default positive rate at which SGD's learning
                             #: rate should decline.
     "max_epoches": 1e4,  #: Default maximum number of epoches before
                          #: interrupting the descent.
+    "min_feature_correlation": 0.5,  #: Smallest correlation of a feature to
+                                     #: observation set accepted.
     "min_delta_epoch": 1e-6,  #: Smallest accepted difference in model loss
                               #: from one epoch to the next.
-    "sgd_k": 50  #: Default number of buckets to use in k-bucket SGD.
+    "sgd_k": 30  #: Default number of buckets to use in k-bucket SGD.
 }

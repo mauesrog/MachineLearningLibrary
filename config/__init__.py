@@ -1,5 +1,5 @@
 from common import *
 from learner import *
-from models import *
+from model import *
 from testing import *
 from utils import *

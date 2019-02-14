@@ -7,7 +7,7 @@ from models.utils.loss import mse
 
 boston = load_boston()
 
-regularization = 0.5
+regularization = 0.0
 lr = 1e-4
 dr = 1e-4
 me = 1e4

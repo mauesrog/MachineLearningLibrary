@@ -6,12 +6,17 @@ Attributes:
     See `config.utils`.
 
 """
-import numpy as _np
-from random import shuffle as _shuffle
+import numpy as np
+from random import shuffle
 
-from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSetsError, \
-                              InvalidFeatureSetError as _InvalidFeatureSetError, \
-                              InvalidObservationSetError as _InvalidObservationSetError
+import pandas as pd
+
+from config import learner_defaults
+from common.exceptions import IncompatibleDataSetsError, \
+                              InvalidFeatureSetError, InvalidObservationSetError
+from general import appendargs, compose
+
+DEFAULT_MIN_FEATURE_CORRELATION = learner_defaults["min_feature_correlation"]
 
 
 def batches(X, Y, k):
@@ -48,43 +53,60 @@ def batches(X, Y, k):
     n, d = X.shape
     """(int, int): Number of data points and number of features."""
 
-    indices = [i for i in range(0, n)]
+    indices = [i for i in range(n)]
     """list of int: Shuffled indiced of data points."""
 
-    _shuffle(indices)
+    shuffle(indices)
 
     batches = []
     """list of np.matrix: All batches."""
-    n_training_points = int(_np.floor(float(n) / float(min(n, k))))
+    n_training_points = compose(int,
+                                np.floor)(float(n) / compose(float, min)(n, k))
     """int: Number of data points destined for training."""
     i = None
     """int: Current data point index."""
 
-    for q in range(0, n_training_points):
-        tot = min(len(indices), k)
+    for q in range(n_training_points):
+        tot = compose(appendargs(min, k), len)(indices)
         """int: Number of data points to add to current batch."""
-        batch = _np.zeros((tot, d + 1))
+        batch = np.zeros((tot, d + 1))
         """int: Current batch."""
 
-        for j in range(0, tot):
+        for j in range(tot):
             i = indices.pop()
-            batch[j, :] = _np.concatenate((X[i, :], Y[i, :]), 1)
+            batch[j, :] = np.concatenate((X[i, :], Y[i, :]), 1)
 
-        batches.append(_np.matrix(batch))
+        compose(batches.append, np.matrix)(batch)
 
-    j = 0
-    """int: Current batch offset."""
+    if len(batches) == 1:
+        n_left = len(indices)
 
-    while len(indices) > 0:
-        i = indices.pop()
+        if n_left == 0:
+            raise ValueError("Unable to partition %d data points into length "
+                             "%d batches." % (n, k))
 
-        datapoint = _np.matrix(_np.concatenate((X[i, :], Y[i, :]), 1))
-        """np.matrix: Remaining data point."""
-        m = j % len(batches)
-        """int: Current batch index."""
+        batch = np.zeros((n_left, d + 1))
+        """int: Current batch."""
 
-        batches[m] = _np.matrix(_np.concatenate((batches[m], datapoint)))
-        j += 1
+        batch = np.concatenate([np.concatenate((X[i, :], Y[i, :]), 1)
+                                for i in indices], 0)
+        compose(batches.append, np.matrix)(batch)
+    else:
+        j = 0
+        """int: Current batch offset."""
+
+        while len(indices) > 0:
+            i = indices.pop()
+
+            datapoint = compose(np.matrix,
+                                np.concatenate)((X[i, :], Y[i, :]), 1)
+            """np.matrix: Remaining data point."""
+            m = j % len(batches)
+            """int: Current batch index."""
+
+            batches[m] = compose(np.matrix,
+                                 np.concatenate)((batches[m], datapoint))
+            j += 1
 
     return batches
 
@@ -107,7 +129,7 @@ def normalize(X):
     """
     validate_feature_set(X)
 
-    return (X - _np.matrix(_np.mean(X, 1))) / _np.matrix(_np.std(X, 1))
+    return (X - np.matrix(np.mean(X, 1))) / np.matrix(np.std(X, 1))
 
 def partition_data(X, Y, f):
     """Data Partitioner.
@@ -151,43 +173,176 @@ def partition_data(X, Y, f):
     n, d = X.shape
     """(int, int): Number of data points and number of features."""
 
-    k = int(_np.floor(n * f))
+    k = int(np.floor(n * f))
     """int: Number of training data points."""
 
-    train_X = _np.zeros((k, d))
+    train_X = np.zeros((k, d))
     """np.matrix: Training feature set."""
-    train_Y = _np.zeros((k, 1))
+    train_Y = np.zeros((k, 1))
     """np.matrix: Training observation set."""
 
-    test_X = _np.zeros((n - k, d))
+    test_X = np.zeros((n - k, d))
     """np.matrix: Testing feature set."""
-    test_Y = _np.zeros((n - k, 1))
+    test_Y = np.zeros((n - k, 1))
     """np.matrix: Testing observation set."""
 
-    indices = [i for i in range(0, n)]
+    indices = [i for i in range(n)]
     """list of int: Shuffled indiced of data points."""
 
-    _shuffle(indices)
+    shuffle(indices)
 
     i = None
     """int: Current data point index."""
 
     # Fill up training data.
-    for j in range(0, k):
+    for j in range(k):
         i = indices.pop()
 
         train_X[j, :] = X[i, :]
         train_Y[j, :] = Y[i, :]
 
     # Fill up testing data.
-    for j in range(0, n - k):
+    for j in range(n - k):
         i = indices.pop()
 
         test_X[j, :] = X[i, :]
         test_Y[j, :] = Y[i, :]
 
-    return _np.matrix(train_X), _np.matrix(train_Y), _np.matrix(test_X), \
-           _np.matrix(test_Y)
+    return np.matrix(train_X), np.matrix(train_Y), np.matrix(test_X), \
+           np.matrix(test_Y)
+
+def reduce_dimensions(X, Y, min=DEFAULT_MIN_FEATURE_CORRELATION, names=None):
+    """Data Point Dimensionality Reducer.
+
+    Args:
+        X (np.matrix): Feature set. Shape: n x d.
+        Y (np.matrix): Observation set. Shape: n x 1.
+        min (float, optional): Determines the minimum correlation value for a
+            feature to be considered relevant. Defaults to
+            `DEFAULT_MIN_FEATURE_CORRELATION`.
+        names (list of str): Feature names. Defaults to `None`.
+
+    Returns:
+        Reduced feature set `np.matrix` if no feature names are provided, a
+            tuple with the reduced feature set and feature names otherwise.
+
+    Raises:
+        ValueError: If no features have a correlation to `Y` greater than or
+            equal to `min`.
+
+    Todo:
+        Get rid of `pandas`.
+
+    """
+    validate_datasets(X, Y)
+
+    if type(min) != int and type(min) != float:
+        raise TypeError("Expected 'float' or 'int' for `f`, saw '%s' instead." %
+                        type(min).__name__)
+
+    if min < 0.0 or min > 1.0:
+        raise ValueError("Minimum correlation has to be a float in the range "
+                         "(0.0, 1.0), not '%f'." % min)
+
+    filter_irrelevant = lambda (i, c): i != '_Y' and abs(c) >= min
+    """callable: Returns `True` if the given index belongs to a feature with a
+    large enough correlation, `False` otherwise."""
+
+    df = pd.DataFrame(X)
+    """DataFrame: Pandas feature snapshot."""
+
+    # Set observations to special key '_Y'.
+    df["_Y"] = np.asarray(Y)
+
+    try:
+        indices = list(zip(*filter(filter_irrelevant,
+                                   df.corr()["_Y"].iteritems()))[0])
+        """list of int: Indices of relevant features."""
+
+        X_hat = compose(np.matrix, np.zeros)((X.shape[0], len(indices)))
+        """np.matrix: Reduced feature set."""
+
+        k = 0
+        """int: Feature number into reduce matrix."""
+
+        for i in range(X.shape[1]):
+            if len(indices) and i == indices[0]:
+                X_hat[:, k] = X[:, indices.pop(0)]
+                k += 1
+            elif names is not None:
+                names.pop(k)
+
+        return X_hat
+    except IndexError as e:
+        raise ValueError("No features satisfy the given minimum correlation.")
+
+def shuffle_batches(batches):
+    """Batch Shuffler.
+
+    Re-orders the datapoints in the given batch set into a new set of batches.
+
+    Args:
+        batches: Batch set to re-order.
+
+    Returns:
+        list of np.matrix: Shuffled batches.
+
+    Raises:
+        InvalidFeatureSetError: If not all the batches are compatible and valid.
+        TypeError: If `batches` is not an iterable of np.matrix instances.
+
+    """
+    if hasattr(batches, 'shape'):
+        raise TypeError("Expected 'list' of 'np.matrix', "
+                        "saw 'np.matrix' instead.")
+
+    extract_length = lambda b: b.shape[0]
+    """callable: Returns the number of rows in the given matrix."""
+
+    try:
+        lengths = map(extract_length, batches)
+        """list of (int, int): Matrix dimensions of all batches."""
+    except AttributeError:
+        raise TypeError("Expected iterable of np.matrix instances.")
+
+    d_hat = batches[0].shape[1]
+    """int: Number of features `d` plus 1."""
+
+    datapoints = []
+    """list of np.matrix: List representation of all data points."""
+    shuffled_batches = []
+    """list of np.matrix: Newly re-ordered batches."""
+
+    for b in batches:
+        for i, datapoint in enumerate(b):
+            datapoints.append(datapoint)
+
+    shuffle(datapoints)
+
+    if d_hat < 2:
+        reason = ("No features found in given dataset of shape '(%d, %d)'." %
+                  batches[0].shape)
+        raise InvalidFeatureSetError(batches[0], reason=reason)
+
+    while len(lengths):
+        length = lengths.pop()
+        """(int, int): Current batch's matrix dimensions."""
+        batch = compose(np.matrix, np.zeros)((length, d_hat))
+        """int: Current batch."""
+
+        for k in range(length):
+            datapoint = datapoints.pop()
+
+            try:
+                batch[k, :] = datapoint[0, :]
+            except ValueError as e:
+                reason = ("No features found in given dataset of shape "
+                          "'(%d, %d)'." % (batch.shape[0], datapoint.shape[1]))
+                raise InvalidFeatureSetError(batch, reason=reason)
+
+        shuffled_batches.append(batch)
+
+    return shuffled_batches
 
 def validate_datasets(X, Y, **kwargs):
     """Dataset Validator.
@@ -212,7 +367,7 @@ def validate_datasets(X, Y, **kwargs):
     validate_observation_set(Y)
 
     if X.shape[0] != Y.shape[0]:
-        raise _IncompatibleDataSetsError(X, Y, **kwargs)
+        raise IncompatibleDataSetsError(X, Y, **kwargs)
 
 def validate_feature_set(X):
     """Dataset Validator.
@@ -226,11 +381,11 @@ def validate_feature_set(X):
         InvalidFeatureSetError: If `X` is an invalid or trivial matrix.
 
     """
-    if type(X) != _np.matrix:
-        raise _InvalidFeatureSetError(X, isType=True)
+    if type(X) != np.matrix:
+        raise InvalidFeatureSetError(X, isType=True)
 
     if X.size == 0:
-        raise _InvalidFeatureSetError(X, reason="Received empty matrix.")
+        raise InvalidFeatureSetError(X, reason="Received empty matrix.")
 
 def validate_observation_set(Y):
     """Dataset Validator.
@@ -245,11 +400,11 @@ def validate_observation_set(Y):
             `Y` does not have exactly one column.
 
     """
-    if type(Y) != _np.matrix:
-        raise _InvalidObservationSetError(Y, isType=True)
+    if type(Y) != np.matrix:
+        raise InvalidObservationSetError(Y, isType=True)
 
     if Y.size == 0:
-        raise _InvalidObservationSetError(Y, reason="Received empty matrix.")
+        raise InvalidObservationSetError(Y, reason="Received empty matrix.")
 
     if Y.shape[1] != 1:
-        raise _InvalidObservationSetError(Y, reason="Not a column vector.")
+        raise InvalidObservationSetError(Y, reason="Not a column vector.")
