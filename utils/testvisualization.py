@@ -6,7 +6,7 @@ Attributes:
 """
 import unittest as _unittest
 import numpy as _np
-from matplotlib.lines import Line2D
+from matplotlib.lines import Line2D as _Line2D
 
 from common.test_cases.module_test_case import ModuleTestCase as _ModuleTestCase
 from common.exceptions import IncompatibleDataSetsError as _IncompatibleDataSetsError, \
@@ -268,7 +268,7 @@ class _Test(_ModuleTestCase):
             # Floats instead of `subplots` integers.
             Visualization("Title", (1.2, 3.4))
 
-        with self.assertRaises(IndexError):
+        with self.assertRaises(ValueError):
             # Negative integers instead of `subplots`.
             Visualization("Title", (-3, -3))
 
@@ -667,7 +667,7 @@ class _Test(_ModuleTestCase):
 
                 # Best-fit lines should be a list of Line2D instances.
                 self.assertIsInstance(lines, list)
-                map(_appendargs(self.assertIsInstance, Line2D), lines)
+                map(_appendargs(self.assertIsInstance, _Line2D), lines)
 
                 unique_x = _compose(list, _np.unique)(x)
                 """list of float: X-values with duplicates removed."""
