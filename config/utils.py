@@ -16,7 +16,7 @@ linalg_defaults = {
 
 visualization_defaults = {
     "bottom": 0.1,  #: Default bottom padding of figures.
-    "figsize": (14.57, 9.0),  #: Default figure size.
+    "figsize": (12.94, 8.0),  #: Default figure size.
     "left": 0.06,  #: Default left padding of figures.
     "margins": (0.1),  #: Default subplot margins.
     "markeredgewidth": 0.0,  #: Default width for all marker edges.

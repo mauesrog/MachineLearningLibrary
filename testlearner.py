@@ -133,11 +133,11 @@ class _Test(_ModuleTestCase):
                 a_err = ModelWrapper.evaluate(test_X, test_Y)
                 """float: Testing error after analytical training."""
 
-                # v = self.learner.visualize(desc, (3, 5))
-                # v.plot_features(test_X, test_Y, None, ModelWrapper,
-                #                 feature_names, target)
-                # v.show()
-                # v.close()
+                v = self.learner.visualize(desc, (3, 5))
+                v.plot_features(test_X, test_Y, None, ModelWrapper,
+                                feature_names, target)
+                v.show()
+                v.close()
 
                 n_training_err = ModelWrapper.train(train_X, train_Y, **kwargs)
                 """float: Numerical training error."""

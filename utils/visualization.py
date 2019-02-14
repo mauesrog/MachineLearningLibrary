@@ -43,7 +43,13 @@ class Visualization(object):
             **kwargs: Additional arguments to supply
                 `matplotlib.pyplot.subplots`.
 
+        Raises:
+            IndexError: If the number of requested subplots is 0.
+
         """
+        if subplots[0] == 0 or subplots[1] == 0:
+            raise IndexError("Expected more than 0 subplots.")
+
         self._fig, all = plt.subplots(*subplots, figsize=DEFAULT_FIGURE_SIZE,
                                       **kwargs)
         self._shape = subplots
